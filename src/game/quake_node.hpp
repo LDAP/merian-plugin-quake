@@ -1,0 +1,65 @@
+#pragma once
+
+#include "game/quake_draw.hpp"
+#include "game/quake_scene.hpp"
+
+#include "merian-graph/connectors/ptr_in.hpp"
+#include "merian-graph/connectors/ptr_out.hpp"
+#include "merian-graph/graph/node.hpp"
+#include "merian-shaders/scene/scene.hpp"
+#include "merian/vk/window/window.hpp"
+
+namespace merian_quake {
+class QuakeScene;
+} // namespace merian_quake
+
+class QuakeNode : public merian::Node {
+public:
+  QuakeNode();
+  ~QuakeNode() override;
+
+  merian::DeviceSupportInfo query_device_support(
+      const merian::DeviceSupportQueryInfo &query_info) override;
+
+  void initialize(const merian::ContextHandle &context,
+                  const merian::ResourceAllocatorHandle &allocator) override;
+
+  std::vector<merian::InputConnectorDescriptor> describe_inputs() override;
+
+  std::vector<merian::OutputConnectorDescriptor>
+  describe_outputs(const merian::NodeIOLayout &io_layout) override;
+
+  void process(merian::GraphRun &run,
+               const merian::DescriptorSetHandle &descriptor_set,
+               const merian::NodeIO &io) override;
+
+  NodeStatusFlags properties(merian::Properties &config) override;
+
+  void set_cmd_args(uint32_t argc, const char **argv);
+
+  void queue_command(const std::string &command);
+
+private:
+  merian::ContextHandle context;
+  merian::ResourceAllocatorHandle allocator;
+  merian::ShaderCompileContextHandle compile_context;
+  merian::TextureManagerHandle texture_manager;
+  merian::MaterialSystemHandle material_system;
+
+  merian_quake::QuakeSceneHandle scene;
+
+  uint32_t argc = 0;
+  const char **argv = nullptr;
+
+  // Optional input from a Window node, forwarded to the Quake engine for play.
+  merian::PtrInHandle<merian::InputController> con_controller =
+      merian::PtrIn<merian::InputController>::create(0, true);
+  merian::PtrInHandle<merian::Window> con_window =
+      merian::PtrIn<merian::Window>::create(0, true);
+  std::weak_ptr<merian::InputController> registered_controller;
+
+  merian::PtrOutHandle<merian::Scene> con_scene =
+      merian::PtrOut<merian::Scene>::create(true);
+  merian::PtrOutHandle<merian_quake::UIDrawCommands> con_ui_draw_commands =
+      merian::PtrOut<merian_quake::UIDrawCommands>::create(true);
+};

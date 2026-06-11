@@ -1,0 +1,3 @@
+[submodule "subprojects/quakespasm"]
+	path = subprojects/quakespasm
+	url = https://github.com/LDAP/quakespasm
