@@ -52,9 +52,7 @@ class QuakeScene : public merian::Scene {
     QuakeScene(const merian::ShaderCompileContextHandle& compile_context,
                const merian::ContextHandle& context,
                const merian::ResourceAllocatorHandle& allocator,
-               const merian::MaterialSystemHandle& material_system,
-               uint32_t quakespasm_argc,
-               const char** quakespasm_argv);
+               const merian::MaterialSystemHandle& material_system);
 
     ~QuakeScene() override;
 
@@ -153,6 +151,7 @@ class QuakeScene : public merian::Scene {
     std::shared_ptr<UIDrawCommands> last_ui_draw_commands = std::make_shared<UIDrawCommands>();
     bool last_scene_rendered = false;
     bool update_gamestate = true;
+    bool quakespasm_initialized = false;
     uint64_t frame = 0;
     uint64_t last_worldspawn_frame = 0;
     double server_fps = 0;

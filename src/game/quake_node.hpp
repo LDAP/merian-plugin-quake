@@ -35,8 +35,6 @@ public:
 
   NodeStatusFlags properties(merian::Properties &config) override;
 
-  void set_cmd_args(uint32_t argc, const char **argv);
-
   void queue_command(const std::string &command);
 
 private:
@@ -47,9 +45,6 @@ private:
   merian::MaterialSystemHandle material_system;
 
   merian_quake::QuakeSceneHandle scene;
-
-  uint32_t argc = 0;
-  const char **argv = nullptr;
 
   // Optional input from a Window node, forwarded to the Quake engine for play.
   merian::PtrInHandle<merian::InputController> con_controller =

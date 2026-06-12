@@ -21,6 +21,7 @@
 #include <map>
 #include <mutex>
 #include <optional>
+#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -49,6 +50,10 @@ struct QuakeData {
     quakeparms_t params;
     merian::AudioDeviceHandle audio_device;
 
+    // COM_InitArgv keeps the pointers, so the tokens must live as long as the engine.
+    std::vector<std::string> argv_tokens;
+    std::vector<char*> argv;
+
     merian::float3 current_sun_color{};
     merian::float3 current_sun_direction{};
 
@@ -56,16 +61,27 @@ struct QuakeData {
 };
 QuakeData g_quake_data;
 
-void init_quakespasm(const uint32_t quakespasm_argc, const char** quakespasm_argv) {
-    std::vector<const char*> quakespasm_args = {"quakespasm"};
-    if (quakespasm_argc > 0) {
-        quakespasm_args.resize(1 + quakespasm_argc);
-        std::memcpy(&quakespasm_args[1], quakespasm_argv,
-                    quakespasm_argc * sizeof(quakespasm_argv[0]));
-    }
+// startup_commands is tokenized on whitespace into the engine command line
+// (e.g. "-game ad +skill 2 +map start"); lines starting with # are ignored.
+void init_quakespasm(const std::string& startup_commands) {
+    std::vector<std::string>& tokens = g_quake_data.argv_tokens;
+    tokens.assign(1, "quakespasm");
+    merian::split(startup_commands, "\n", [&](const std::string& line) {
+        if (line.starts_with("#"))
+            return;
+        std::istringstream stream(line);
+        std::string token;
+        while (stream >> token)
+            tokens.push_back(token);
+    });
+    std::vector<char*>& argv = g_quake_data.argv;
+    argv.clear();
+    for (std::string& token : tokens)
+        argv.push_back(token.data());
 
-    g_quake_data.params.argc = static_cast<int>(quakespasm_args.size());
-    g_quake_data.params.argv = const_cast<char**>(quakespasm_args.data());
+    host_parms = &g_quake_data.params;
+    g_quake_data.params.argc = static_cast<int>(argv.size());
+    g_quake_data.params.argv = argv.data();
     g_quake_data.params.errstate = 0;
     g_quake_data.params.memsize = 256 * 1024 * 1024;
     g_quake_data.params.membase = malloc(g_quake_data.params.memsize);
@@ -92,7 +108,6 @@ void shutdown_quakespasm() {
     Host_Shutdown();
 
     free(g_quake_data.params.membase);
-    g_quake_data.quake_scene = nullptr;
 }
 
 void parse_worldspawn() {
@@ -362,9 +377,7 @@ extern "C" void SNDDMA_UnblockSound(void) {
 QuakeScene::QuakeScene(const merian::ShaderCompileContextHandle& compile_context,
                        const merian::ContextHandle& context,
                        const merian::ResourceAllocatorHandle& allocator,
-                       const merian::MaterialSystemHandle& material_system,
-                       const uint32_t quakespasm_argc,
-                       const char** quakespasm_argv)
+                       const merian::MaterialSystemHandle& material_system)
     : merian::Scene(compile_context, context, allocator, material_system) {
 
     if (g_quake_data.quake_scene != nullptr) {
@@ -391,13 +404,15 @@ QuakeScene::QuakeScene(const merian::ShaderCompileContextHandle& compile_context
     } else {
         g_quake_data.audio_device = nullptr;
     }
-    host_parms = &g_quake_data.params;
-
-    init_quakespasm(quakespasm_argc, quakespasm_argv);
+    // Engine init is deferred to the first on_update so "startup commands" from
+    // the graph config can become the engine command line.
 }
 
 QuakeScene::~QuakeScene() {
-    shutdown_quakespasm();
+    if (quakespasm_initialized) {
+        shutdown_quakespasm();
+    }
+    g_quake_data.quake_scene = nullptr;
 }
 
 float QuakeScene::get_time(const float /*time*/) {
@@ -663,6 +678,11 @@ void QuakeScene::on_update(const merian::CommandBufferHandle& cmd,
                            const float time_diff,
                            const uint32_t /*frame*/) {
     MERIAN_PROFILE_SCOPE_GPU(cmd, "QuakeScene::on_update");
+
+    if (!quakespasm_initialized) {
+        init_quakespasm(startup_commands);
+        quakespasm_initialized = true;
+    }
 
     if (!update_gamestate)
         return;
@@ -1555,15 +1575,10 @@ void QuakeScene::properties(merian::Properties& config) {
             update_gamestate = true;
         }
     }
-    bool changed = config.config_text_multiline(
+    std::ignore = config.config_text_multiline(
         "startup commands", startup_commands, false,
-        "multiple commands separated by newline, lines starting with # are ignored");
-    if (changed && frame == 0) {
-        merian::split(startup_commands, "\n", [&](const std::string& cmd) {
-            if (!cmd.starts_with("#"))
-                queue_command(cmd);
-        });
-    }
+        "engine command line, e.g. '-game ad +skill 2 +map start'; whitespace separated, lines "
+        "starting with # are ignored; applied at engine startup");
 
     config.config_options("filtering", default_filtering, {"nearest", "linear"},
                           merian::Properties::OptionsStyle::COMBO,

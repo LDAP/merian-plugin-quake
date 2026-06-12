@@ -29,7 +29,7 @@ void QuakeNode::initialize(const merian::ContextHandle &context,
   material_system = std::make_shared<merian::MaterialSystem>(
       compile_context, context, allocator, texture_manager);
   scene = std::make_shared<merian_quake::QuakeScene>(
-      compile_context, context, allocator, material_system, argc, argv);
+      compile_context, context, allocator, material_system);
 }
 
 std::vector<merian::InputConnectorDescriptor> QuakeNode::describe_inputs() {
@@ -71,11 +71,6 @@ QuakeNode::NodeStatusFlags QuakeNode::properties(merian::Properties &config) {
   if (scene)
     scene->properties(config);
   return {};
-}
-
-void QuakeNode::set_cmd_args(const uint32_t argc, const char **argv) {
-  this->argc = argc;
-  this->argv = argv;
 }
 
 void QuakeNode::queue_command(const std::string &command) {
