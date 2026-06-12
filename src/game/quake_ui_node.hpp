@@ -6,7 +6,7 @@
 #include "merian-graph/connectors/image/vk_image_out_managed.hpp"
 #include "merian-graph/connectors/ptr_in.hpp"
 #include "merian-graph/graph/node.hpp"
-#include "merian-shaders/scene/scene.hpp"
+#include "merian-scene/scene.hpp"
 
 #include "merian/vk/descriptors/descriptor_set_layout.hpp"
 #include "merian/vk/memory/resource_allocations.hpp"
