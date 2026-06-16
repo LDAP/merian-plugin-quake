@@ -95,7 +95,7 @@ struct QuakeMaterial : MaterialModel {
         }
 
         if (gloss_tex != TextureID(-1)) {
-            roughness = lod.sample(tm.get_sampler2D(gloss_tex), uv).r;
+            roughness = tm.get_sampler2D(gloss_tex).SampleLevel(uv, 0).r;
         }
         const float alpha = ggx_roughness_to_alpha(max(roughness, merian_hint_min_roughness));
         s.brdf = QuakeBSDF(GGXBRDF(alpha), LambertDiffuseBRDF(albedo), 0.02f);
@@ -114,11 +114,15 @@ struct QuakeMaterialSample : MaterialSample {
         return brdf;
     }
     property OrthonormalFrame shading_frame {
-        get { return frame; }
+        get {
+            return frame;
+        }
     }
     property float3 shading_normal {
-        get { return frame.get_normal(); }
+        get {
+            return frame.get_normal();
+        }
     }
 }
 
-}
+} // namespace merian
