@@ -6,7 +6,7 @@
 #include "merian-graph/connectors/ptr_in.hpp"
 #include "merian-graph/connectors/ptr_out.hpp"
 #include "merian-graph/graph/node.hpp"
-#include "merian-scene/scene.hpp"
+#include "merian-shaders/scene/scene.hpp"
 #include "merian/vk/window/window.hpp"
 
 namespace merian_quake {

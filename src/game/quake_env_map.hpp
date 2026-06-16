@@ -1,6 +1,6 @@
 #pragma once
 
-#include "merian-scene/env_map.hpp"
+#include "merian-shaders/scene/env_map.hpp"
 #include "merian-shaders/utils/texture-manager-data.slangh"
 #include "merian/utils/vector_matrix.hpp"
 

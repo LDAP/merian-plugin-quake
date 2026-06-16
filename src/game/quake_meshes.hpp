@@ -1,7 +1,7 @@
 #pragma once
 
 #include "merian-shaders/scene/scene-data.slangh"
-#include "merian-scene/scene.hpp"
+#include "merian-shaders/scene/scene.hpp"
 
 #include <vector>
 

@@ -3,7 +3,7 @@
 #include "game/quake_draw.hpp"
 #include "game/quake_material.hpp"
 
-#include "merian-scene/scene.hpp"
+#include "merian-shaders/scene/scene.hpp"
 #include "merian/shader/shader_compile_context.hpp"
 #include "merian/utils/concurrent/concurrent_queue.hpp"
 #include "merian/utils/input_controller.hpp"
