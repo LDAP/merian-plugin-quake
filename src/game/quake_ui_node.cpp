@@ -8,7 +8,9 @@
 #include "merian/vk/pipeline/pipeline_graphics_builder.hpp"
 #include "merian/vk/utils/profiler.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 
 namespace merian_quake {
@@ -21,14 +23,16 @@ struct PushConstants {
 };
 
 // Quake's GL canvas is y-up with ortho_b > ortho_t; VK framebuffer is y-down.
+// Viewport coordinates are engine pixels, scaled by (sx, sy) into the framebuffer.
 std::pair<float, float> resolve_canvas(const UICanvas &c, const float lx,
-                                       const float ly, const float fb_height) {
+                                       const float ly, const float fb_height,
+                                       const float sx, const float sy) {
   const float fx = (lx - c.ortho_l) / (c.ortho_r - c.ortho_l);
   const float fy = (ly - c.ortho_t) / (c.ortho_b - c.ortho_t);
   const float px = static_cast<float>(c.vx) + fx * static_cast<float>(c.vw);
   const float py_gl =
       static_cast<float>(c.vy) + (1.0f - fy) * static_cast<float>(c.vh);
-  return {px, fb_height - py_gl};
+  return {px * sx, fb_height - py_gl * sy};
 }
 
 bool scissor_eq(const UIScissor &a, const UIScissor &b) {
@@ -171,6 +175,22 @@ void QuakeUiNode::process(
   }
 
   const float fb_h = static_cast<float>(extent.height);
+  // engine canvas pixels -> framebuffer pixels (the engine sizes its vid to the
+  // window, which may differ from the extent)
+  const float sx = draw_commands->width > 0
+                       ? static_cast<float>(extent.width) /
+                             static_cast<float>(draw_commands->width)
+                       : 1.0f;
+  const float sy = draw_commands->height > 0
+                       ? static_cast<float>(extent.height) /
+                             static_cast<float>(draw_commands->height)
+                       : 1.0f;
+  const int32_t canvas_w = draw_commands->width > 0
+                               ? static_cast<int32_t>(draw_commands->width)
+                               : static_cast<int32_t>(extent.width);
+  const int32_t canvas_h = draw_commands->height > 0
+                               ? static_cast<int32_t>(draw_commands->height)
+                               : static_cast<int32_t>(extent.height);
 
   vertices.clear();
   indices.clear();
@@ -180,13 +200,13 @@ void QuakeUiNode::process(
   batches.reserve(16);
 
   UICanvas cur_canvas{0,
-                      static_cast<float>(extent.width),
-                      fb_h,
+                      static_cast<float>(canvas_w),
+                      static_cast<float>(canvas_h),
                       0,
                       0,
                       0,
-                      static_cast<int32_t>(extent.width),
-                      static_cast<int32_t>(extent.height)};
+                      canvas_w,
+                      canvas_h};
   UIScissor cur_scissor{0, 0, 0, -1};
   uint32_t cur_color = 0xFFFFFFFFu;
   std::size_t evt_canvas = 0;
@@ -225,8 +245,10 @@ void QuakeUiNode::process(
       batch_scissor = cur_scissor;
     }
 
-    const auto [x0, y0] = resolve_canvas(cur_canvas, q.pos[0], q.pos[1], fb_h);
-    const auto [x1, y1] = resolve_canvas(cur_canvas, q.pos[2], q.pos[3], fb_h);
+    const auto [x0, y0] =
+        resolve_canvas(cur_canvas, q.pos[0], q.pos[1], fb_h, sx, sy);
+    const auto [x1, y1] =
+        resolve_canvas(cur_canvas, q.pos[2], q.pos[3], fb_h, sx, sy);
 
     const auto base = static_cast<uint32_t>(vertices.size());
     vertices.push_back(
@@ -298,12 +320,29 @@ void QuakeUiNode::process(
       if (b.scissor.w <= 0 || b.scissor.h <= 0) {
         cmd->set_scissor(vk::Rect2D{{0, 0}, fb_extent});
       } else {
-        // GL scissor is y-up; flip into VK y-down.
-        const int32_t y_top =
-            static_cast<int32_t>(extent.height) - b.scissor.y - b.scissor.h;
-        cmd->set_scissor(vk::Rect2D{{b.scissor.x, y_top},
-                                    {static_cast<uint32_t>(b.scissor.w),
-                                     static_cast<uint32_t>(b.scissor.h)}});
+        // GL scissor is y-up engine pixels; scale into the framebuffer, flip
+        // into VK y-down and clamp to the framebuffer.
+        const int32_t fb_w = static_cast<int32_t>(extent.width);
+        const int32_t fb_hi = static_cast<int32_t>(extent.height);
+        const auto x0 = std::clamp(
+            static_cast<int32_t>(
+                std::floor(static_cast<float>(b.scissor.x) * sx)),
+            0, fb_w);
+        const auto y0 = std::clamp(
+            fb_hi - static_cast<int32_t>(std::ceil(
+                        static_cast<float>(b.scissor.y + b.scissor.h) * sy)),
+            0, fb_hi);
+        const auto x1 = std::clamp(
+            static_cast<int32_t>(
+                std::ceil(static_cast<float>(b.scissor.x + b.scissor.w) * sx)),
+            x0, fb_w);
+        const auto y1 = std::clamp(
+            fb_hi - static_cast<int32_t>(
+                        std::floor(static_cast<float>(b.scissor.y) * sy)),
+            y0, fb_hi);
+        cmd->set_scissor(vk::Rect2D{{x0, y0},
+                                    {static_cast<uint32_t>(x1 - x0),
+                                     static_cast<uint32_t>(y1 - y0)}});
       }
       last_scissor = b.scissor;
     }

@@ -5,13 +5,30 @@
         "imgui event": "ui",
         "iterations in flight": 2,
         "low latency": false,
-        "short_config": {
-            "--": {
-                "pointer": "/nodes/7/properties/startup commands",
-                "required": false
-            }
-        },
         "time overwrite": "None"
+    },
+    "cli": {
+        "--": {
+            "pointer": "/nodes/quake/properties/startup commands"
+        },
+        "renderer": {
+            "type": "variant",
+            "default": "pt",
+            "variants": {
+                "pt": {
+                    "merge": "renderers/pt.json",
+                    "set": {
+                        "/nodes/render/properties/max path length": 3
+                    }
+                },
+                "mcpg": {
+                    "merge": "renderers/mcpg.json"
+                },
+                "restir_di": {
+                    "merge": "renderers/restir_di.json"
+                }
+            }
+        }
     },
     "nodes": [
         {
@@ -20,7 +37,8 @@
             "outputs": [
                 "history->accumulate.prev_history",
                 "out->accumulate.prev_out",
-                "out->exposure.src"
+                "out->exposure.src",
+                "out->ui.extent_ref"
             ],
             "properties": {
                 "IPR factor": 50.0,
@@ -229,30 +247,6 @@
                 "volume max t": 1000.0
             },
             "type": "Quake"
-        },
-        {
-            "enabled": true,
-            "id": "render",
-            "outputs": [
-                "irradiance->accumulate.src",
-                "irradiance->ui.extent_ref"
-            ],
-            "properties": {
-                "0": true,
-                "1": true,
-                "2": true,
-                "3": true,
-                "4": true,
-                "5": true,
-                "6": true,
-                "7": true,
-                "emission on primary": true,
-                "height": 1080,
-                "max path length": 3,
-                "samples per pixel": 2,
-                "width": 1920
-            },
-            "type": "Render (Path-traced)"
         },
         {
             "enabled": true,
