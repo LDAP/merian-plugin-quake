@@ -5,6 +5,7 @@ import merian_shaders.shading.materials.material;
 import merian_shaders.shading.bsdfs.brdf_ggx;
 import merian_shaders.shading.bsdfs.brdf_lambert_diffuse;
 import merian_shaders.shading.bsdfs.bsdf_fresnel_mix;
+import merian_shaders.shading.bsdfs.bsdf_tint;
 import merian_shaders.utils.normal_map;
 
 #include "shader/quake-material.slangh"
@@ -28,7 +29,8 @@ float2 quake_waves(const float2 st, const float time) {
                 pow(max(sin(-(st).x * 5 + -(st).y * 3 + (time) * 3), 0), 5));
 }
 
-typealias QuakeBSDF = FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>;
+// albedo tints both lobes (matches the old bsdf_ggx_diffuse_mix; keeps demodulation exact)
+typealias QuakeBSDF = TintBSDF<FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>>;
 
 struct QuakeMaterial : MaterialModel {
     typealias MaterialSampleImpl = QuakeMaterialSample;
@@ -98,7 +100,9 @@ struct QuakeMaterial : MaterialModel {
             roughness = tm.get_sampler2D(gloss_tex).SampleLevel(uv, 0).r;
         }
         const float alpha = ggx_roughness_to_alpha(max(roughness, merian_hint_min_roughness));
-        s.brdf = QuakeBSDF(GGXBRDF(alpha), LambertDiffuseBRDF(albedo), 0.02f);
+        s.brdf = QuakeBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
+                               GGXBRDF(alpha), LambertDiffuseBRDF(float3(1.0f)), 0.02f),
+                           albedo);
         return s;
     }
 }
