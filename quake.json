@@ -1,4 +1,31 @@
 {
+    "cli": {
+        "--": {
+            "pointer": "/nodes/quake/properties/startup commands"
+        },
+        "renderer": {
+            "default": "pt",
+            "type": "variant",
+            "variants": {
+                "mcpg": {
+                    "merge": "renderers/mcpg.json",
+                    "set": {
+                        "/nodes/render/properties/max path length": 3,
+                        "/nodes/render/properties/lc/LC min pdf": 10
+                    }
+                },
+                "pt": {
+                    "merge": "renderers/pt.json",
+                    "set": {
+                        "/nodes/render/properties/max path length": 3
+                    }
+                },
+                "restir_di": {
+                    "merge": "renderers/restir_di.json"
+                }
+            }
+        }
+    },
     "graph_properties": {
         "flush thread pool": true,
         "fps limiter": false,
@@ -7,33 +34,9 @@
         "low latency": false,
         "time overwrite": "None"
     },
-    "cli": {
-        "--": {
-            "pointer": "/nodes/quake/properties/startup commands"
-        },
-        "renderer": {
-            "type": "variant",
-            "default": "pt",
-            "variants": {
-                "pt": {
-                    "merge": "renderers/pt.json",
-                    "set": {
-                        "/nodes/render/properties/max path length": 3
-                    }
-                },
-                "mcpg": {
-                    "merge": "renderers/mcpg.json"
-                },
-                "restir_di": {
-                    "merge": "renderers/restir_di.json"
-                }
-            }
-        }
-    },
-    "nodes": [
-        {
+    "nodes": {
+        "accumulate": {
             "enabled": true,
-            "id": "accumulate",
             "outputs": [
                 "history->accumulate.prev_history",
                 "out->accumulate.prev_out",
@@ -42,31 +45,30 @@
             ],
             "properties": {
                 "IPR factor": 50.0,
-                "adaptivity": 0.0,
-                "adaptivity IPR factor": 1.5,
-                "adaptivity percentile lower": 0.05000000074505806,
-                "adaptivity percentile upper": 0.949999988079071,
-                "alpha": 1.0,
+                "adaptivity": 0.9009900093078613,
+                "adaptivity IPR factor": 3.0,
+                "adaptivity percentile lower": 0.1902180016040802,
+                "adaptivity percentile upper": 0.9065219759941101,
+                "alpha": 0.9509999752044678,
                 "clear event pattern": "/user/clear",
-                "depth threshold": 0.010909000411629677,
+                "depth threshold": 0.026403000578284264,
                 "extended search": true,
-                "filter mode": "nearest",
+                "filter mode": "stochastic bilinear",
                 "firefly filter bias": 0.20000000298023224,
-                "firefly filter enable": false,
+                "firefly filter enable": true,
                 "firefly percentile lower": 0.25,
                 "firefly percentile upper": 0.8999999761581421,
                 "gbuffer check": "always",
                 "hard clamp": "inf",
                 "max history": "inf",
-                "normal threshold": 0.6435011029243469,
-                "reuse border": false,
+                "normal threshold": 0.645771861076355,
+                "reuse border": true,
                 "use motion vectors": true
             },
             "type": "Accumulate"
         },
-        {
+        "blit": {
             "enabled": true,
-            "id": "blit",
             "outputs": [
                 "acquire->imgui.acquire"
             ],
@@ -76,9 +78,8 @@
             },
             "type": "Swapchain Blit"
         },
-        {
+        "composite": {
             "enabled": true,
-            "id": "composite",
             "outputs": [
                 "out->blit.src"
             ],
@@ -89,9 +90,8 @@
             },
             "type": "Reduce"
         },
-        {
+        "exposure": {
             "enabled": true,
-            "id": "exposure",
             "outputs": [
                 "out->tonemap.src"
             ],
@@ -112,9 +112,8 @@
             },
             "type": "Exposure"
         },
-        {
+        "gbuffer": {
             "enabled": true,
-            "id": "gbuffer",
             "outputs": [
                 "denoiser->accumulate.gbuffer.tex0",
                 "denoiser->accumulate.prev_gbuffer.tex0",
@@ -138,17 +137,15 @@
             },
             "type": "GBuffer (Raytraced)"
         },
-        {
+        "imgui": {
             "enabled": true,
-            "id": "imgui",
             "properties": {
                 "imgui event": "ui"
             },
             "type": "ImGui"
         },
-        {
+        "output": {
             "enabled": true,
-            "id": "output",
             "outputs": [
                 "acquire->blit.acquire",
                 "controller->quake.controller",
@@ -171,9 +168,8 @@
             },
             "type": "Window"
         },
-        {
+        "quake": {
             "enabled": true,
-            "id": "quake",
             "outputs": [
                 "scene->gbuffer.scene",
                 "scene->render.scene",
@@ -248,9 +244,8 @@
             },
             "type": "Quake"
         },
-        {
+        "tonemap": {
             "enabled": true,
-            "id": "tonemap",
             "outputs": [
                 "out->composite.input_0"
             ],
@@ -263,14 +258,13 @@
             },
             "type": "Tonemap"
         },
-        {
+        "ui": {
             "enabled": true,
-            "id": "ui",
             "outputs": [
                 "out->composite.input_1"
             ],
             "type": "Quake UI"
         }
-    ],
-    "version": 3
+    },
+    "version": 4
 }
