@@ -45,9 +45,7 @@ class QuakeUiNode : public merian::Node {
     void initialize(const merian::ContextHandle& context,
                     const merian::ResourceAllocatorHandle& allocator) override;
 
-    void process(merian::GraphRun& run,
-                 const merian::DescriptorSetHandle& descriptor_set,
-                 const merian::NodeIO& io) override;
+    void process(merian::GraphRun& run, const merian::NodeIO& io) override;
 
     NodeStatusFlags properties(merian::Properties& props) override;
 
@@ -61,7 +59,7 @@ class QuakeUiNode : public merian::Node {
     merian::PtrInHandle<UIDrawCommands> con_ui_draw_commands =
         merian::PtrIn<UIDrawCommands>::create();
     merian::PtrInHandle<merian::Scene> con_scene = merian::PtrIn<merian::Scene>::create();
-    merian::VkSampledImageInHandle con_extent_ref = merian::VkSampledImageIn::fragment_read();
+    merian::VkSampledImageInHandle con_extent_ref = merian::VkSampledImageIn::create();
     merian::ManagedVkImageOutHandle con_out;
 
     vk::Extent3D extent{};

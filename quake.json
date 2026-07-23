@@ -10,18 +10,48 @@
                 "mcpg": {
                     "merge": "renderers/mcpg.json",
                     "set": {
-                        "/nodes/render/properties/max path length": 3,
-                        "/nodes/render/properties/lc/LC min pdf": 10
+                        "/nodes/gbuffer/outputs": [
+                            "emission->add.input_1",
+                            "gbuffer->accumulate.gbuffer",
+                            "gbuffer->accumulate.prev_gbuffer",
+                            "gbuffer->render.gbuffer",
+                            "gbuffer->svgf.gbuffer"
+                        ],
+                        "/nodes/render/properties/demodulate albedo": true,
+                        "/nodes/render/properties/emission on primary": false,
+                        "/nodes/render/properties/lc/LC min pdf": 10,
+                        "/nodes/render/properties/max path length": 3
                     }
                 },
                 "pt": {
                     "merge": "renderers/pt.json",
                     "set": {
+                        "/nodes/gbuffer/outputs": [
+                            "emission->add.input_1",
+                            "gbuffer->accumulate.gbuffer",
+                            "gbuffer->accumulate.prev_gbuffer",
+                            "gbuffer->render.gbuffer",
+                            "gbuffer->svgf.gbuffer"
+                        ],
+                        "/nodes/render/properties/demodulate albedo": true,
+                        "/nodes/render/properties/emission on primary": false,
                         "/nodes/render/properties/max path length": 3
                     }
                 },
                 "restir_di": {
-                    "merge": "renderers/restir_di.json"
+                    "merge": "renderers/restir_di.json",
+                    "set": {
+                        "/nodes/gbuffer/outputs": [
+                            "emission->add.input_1",
+                            "gbuffer->accumulate.gbuffer",
+                            "gbuffer->accumulate.prev_gbuffer",
+                            "gbuffer->render.gbuffer",
+                            "gbuffer->render.prev_gbuffer",
+                            "gbuffer->svgf.gbuffer"
+                        ],
+                        "/nodes/render/properties/demodulate albedo": true,
+                        "/nodes/render/properties/emission on primary": false
+                    }
                 }
             }
         }
@@ -39,8 +69,9 @@
             "enabled": true,
             "outputs": [
                 "history->accumulate.prev_history",
+                "history->svgf.history",
                 "out->accumulate.prev_out",
-                "out->exposure.src",
+                "out->svgf.src",
                 "out->ui.extent_ref"
             ],
             "properties": {
@@ -67,6 +98,18 @@
             },
             "type": "Accumulate"
         },
+        "add": {
+            "enabled": true,
+            "outputs": [
+                "out->exposure.src"
+            ],
+            "properties": {
+                "initial value": "",
+                "number inputs": 2,
+                "reduction": "accumulator + current_value"
+            },
+            "type": "Reduce"
+        },
         "blit": {
             "enabled": true,
             "outputs": [
@@ -86,7 +129,7 @@
             "properties": {
                 "initial value": "",
                 "number inputs": 2,
-                "reduction": "current_value + accumulator * (1.0 - current_value.a)"
+                "reduction": "current_value + float4(accumulator.rgb, 1) * (1.0 - current_value.a)"
             },
             "type": "Reduce"
         },
@@ -112,16 +155,21 @@
             },
             "type": "Exposure"
         },
+        "fxaa": {
+            "enabled": true,
+            "outputs": [
+                "out->composite.input_0"
+            ],
+            "type": "FXAA"
+        },
         "gbuffer": {
             "enabled": true,
             "outputs": [
-                "denoiser->accumulate.gbuffer.tex0",
-                "denoiser->accumulate.prev_gbuffer.tex0",
+                "emission->add.input_1",
+                "gbuffer->accumulate.gbuffer",
+                "gbuffer->accumulate.prev_gbuffer",
                 "gbuffer->render.gbuffer",
-                "hit_info->accumulate.gbuffer.tex1",
-                "hit_info->accumulate.prev_gbuffer.tex1",
-                "mv->accumulate.gbuffer.tex2",
-                "mv->accumulate.prev_gbuffer.tex2"
+                "gbuffer->svgf.gbuffer"
             ],
             "properties": {
                 "0": true,
@@ -189,49 +237,6 @@
                 "overwrite sun": false,
                 "rebuild after stop": true,
                 "reproducible renders": false,
-                "scene": {
-                    "cameras": {
-                        "active": 0,
-                        "aspect": 1.7777777910232544,
-                        "far": 100000.0,
-                        "fly": [
-                            0.0,
-                            0.0,
-                            0.0
-                        ],
-                        "fov": 106.26020812988281,
-                        "jitter": "None",
-                        "move": [
-                            0.0,
-                            0.0,
-                            0.0
-                        ],
-                        "near": 0.009999999776482582,
-                        "orbit": [
-                            0.0,
-                            0.0
-                        ],
-                        "position": [
-                            1008.78125,
-                            -3585.03125,
-                            1550.09375
-                        ],
-                        "rotate": [
-                            0.0,
-                            0.0
-                        ],
-                        "target": [
-                            1007.78125,
-                            -3585.025634765625,
-                            1550.09375
-                        ],
-                        "up": [
-                            0.0,
-                            0.0,
-                            1.0
-                        ]
-                    }
-                },
                 "settings": {
                     "Alpha Test Threshold": 0.699999988079071,
                     "BLAS Rebuild Fraction": 0.33000001311302185,
@@ -244,10 +249,39 @@
             },
             "type": "Quake"
         },
+        "svgf": {
+            "enabled": true,
+            "outputs": [
+                "out->add.input_0",
+                "out->svgf.prev_out"
+            ],
+            "properties": {
+                "SVGF iterations": 5,
+                "TAA alpha": 0.5,
+                "clamping": "min-max",
+                "debug": "none",
+                "depth accept": 40.0,
+                "enable motion vectors": true,
+                "filter": "none",
+                "filter depth": 40.0,
+                "filter luminance": 3.0,
+                "filter normals": 0.5235987901687622,
+                "filter type": "subsampled",
+                "kaleidoscope": false,
+                "kaleidoscope: shmem": true,
+                "mv sampling": "center",
+                "normal reject": 0.5235987901687622,
+                "spatial bias": 8.0,
+                "spatial falloff": 3.0,
+                "z-bias depth": 0.0,
+                "z-bias normals": 3000.0
+            },
+            "type": "Denoiser (SVGF)"
+        },
         "tonemap": {
             "enabled": true,
             "outputs": [
-                "out->composite.input_0"
+                "out->fxaa.src"
             ],
             "properties": {
                 "alpha mode": "Perceptual luminance",
