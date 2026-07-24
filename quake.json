@@ -52,6 +52,18 @@
                         "/nodes/render/properties/demodulate albedo": true,
                         "/nodes/render/properties/emission on primary": false
                     }
+                },
+                "ssmm": {
+                    "merge": "renderers/ssmm.json",
+                    "set": {
+                        "/nodes/gbuffer/outputs": [
+                            "emission->add.input_1",
+                            "gbuffer->accumulate.gbuffer",
+                            "gbuffer->accumulate.prev_gbuffer",
+                            "gbuffer->render.gbuffer",
+                            "gbuffer->svgf.gbuffer"
+                        ]
+                    }
                 }
             }
         }
