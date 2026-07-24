@@ -723,12 +723,13 @@ void QuakeScene::update_camera() {
     AngleVectors(r_refdef.viewangles, fwd, rgt, up);
 
     const merian::float3 pos = merian::as_float3(r_refdef.vieworg);
-    const float aspect = resolution.height > 0 ? static_cast<float>(resolution.width) /
-                                                     static_cast<float>(resolution.height)
-                                               : 16.F / 9.F;
     cam->look_at(pos, pos + merian::float3(fwd[0], fwd[1], fwd[2]),
                  merian::float3(up[0], up[1], up[2]), merian::radians(r_refdef.fov_y));
-    cam->set_aspect_ratio(aspect);
+    if (resolution.width > 0 && resolution.height > 0) {
+        cam->set_resolution(resolution);
+    } else {
+        cam->set_aspect_ratio(16.F / 9.F);
+    }
 }
 
 namespace {

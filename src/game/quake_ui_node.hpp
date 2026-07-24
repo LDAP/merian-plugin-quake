@@ -45,7 +45,9 @@ class QuakeUiNode : public merian::Node {
     void initialize(const merian::ContextHandle& context,
                     const merian::ResourceAllocatorHandle& allocator) override;
 
-    void process(merian::GraphRun& run, const merian::NodeIO& io) override;
+    [[nodiscard]] merian::Node::NodeStatusFlags process(const merian::NodeIO& io,
+                                                        const merian::NodeProcessInfo& info,
+                                                        merian::Submission& submission) override;
 
     NodeStatusFlags properties(merian::Properties& props) override;
 

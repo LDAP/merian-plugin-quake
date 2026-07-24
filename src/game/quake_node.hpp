@@ -21,6 +21,11 @@ class QuakeNode : public merian::Node {
     merian::DeviceSupportInfo
     query_device_support(const merian::DeviceSupportQueryInfo& query_info) override;
 
+    [[nodiscard]] NodeStatusFlags on_connected(const merian::NodeIOLayout& io_layout,
+                                               const merian::NodeIO& io,
+                                               const merian::NodeConnectionInfo& info,
+                                               merian::Submission& submission) override;
+
     void initialize(const merian::ContextHandle& context,
                     const merian::ResourceAllocatorHandle& allocator) override;
 
@@ -29,7 +34,9 @@ class QuakeNode : public merian::Node {
     std::vector<merian::OutputConnectorDescriptor>
     describe_outputs(const merian::NodeIOLayout& io_layout) override;
 
-    void process(merian::GraphRun& run, const merian::NodeIO& io) override;
+    [[nodiscard]] merian::Node::NodeStatusFlags process(const merian::NodeIO& io,
+                                                        const merian::NodeProcessInfo& info,
+                                                        merian::Submission& submission) override;
 
     NodeStatusFlags properties(merian::Properties& config) override;
 

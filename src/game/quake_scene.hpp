@@ -71,12 +71,6 @@ class QuakeScene : public merian::Scene {
         return quake_material_type_id;
     }
 
-    // Resolution as reported by Quake (vid.width / vid.height). Updated when
-    // VID_Changed_f fires.
-    vk::Extent3D get_resolution() const {
-        return resolution;
-    }
-
     // Pass a dummy controller to detach. The window enables text-input
     // toggling (Quake console / menu typing); pass nullptr to skip.
     void set_controller(const merian::InputControllerHandle& controller,

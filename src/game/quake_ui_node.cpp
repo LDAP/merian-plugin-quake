@@ -124,9 +124,12 @@ void QuakeUiNode::ensure_white_texture(const merian::CommandBufferHandle& cmd) {
         vk::PipelineStageFlagBits2::eFragmentShader));
 }
 
-void QuakeUiNode::process(merian::GraphRun& run, const merian::NodeIO& io) {
-    MERIAN_PROFILE_SCOPE_GPU(run.get_cmd(), "QuakeUiNode::process");
-    const merian::CommandBufferHandle& cmd = run.get_cmd();
+[[nodiscard]] merian::Node::NodeStatusFlags
+QuakeUiNode::process(const merian::NodeIO& io,
+                     [[maybe_unused]] const merian::NodeProcessInfo& info,
+                     merian::Submission& submission) {
+    MERIAN_PROFILE_SCOPE_GPU(submission.get_cmd(), "QuakeUiNode::process");
+    const merian::CommandBufferHandle& cmd = submission.get_cmd();
     const merian::ImageHandle& out_image = io[con_out].get_image(0);
 
     ensure_white_texture(cmd);
@@ -160,7 +163,7 @@ void QuakeUiNode::process(merian::GraphRun& run, const merian::NodeIO& io) {
         cmd->begin_rendering(
             vk::RenderingInfo{{}, vk::Rect2D{{0, 0}, fb_extent}, 1, 0, color_attachment});
         cmd->end_rendering();
-        return;
+        return {};
     }
 
     const float fb_h = static_cast<float>(extent.height);
@@ -338,6 +341,7 @@ void QuakeUiNode::process(merian::GraphRun& run, const merian::NodeIO& io) {
         .color_events = static_cast<uint32_t>(draw_commands->color_events.size()),
         .unique_textures = unique_textures,
     };
+    return {};
 }
 
 QuakeUiNode::NodeStatusFlags QuakeUiNode::properties(merian::Properties& config) {
