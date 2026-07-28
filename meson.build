@@ -6,7 +6,7 @@ project(
     # assertion/optimization config (built in-tree it follows merian; standalone, pass --buildtype).
     default_options: [
         'warning_level=2',
-        'cpp_std=c++23',
+        'cpp_std=c++23,c++latest',
     ],
     meson_version: '>=1.3.0',
 )
