@@ -105,6 +105,17 @@ struct QuakeMaterial : MaterialModel {
                            albedo);
         return s;
     }
+
+    // the zero tint makes the BSDF evaluate to zero
+    static QuakeMaterialSample make_emissive(const float3 emission, const float3 normal) {
+        QuakeMaterialSample s;
+        s.frame = OrthonormalFrame(normal);
+        s.emission = emission;
+        s.brdf = QuakeBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
+                               GGXBRDF(1.0f), LambertDiffuseBRDF(float3(1.0f)), 0.02f),
+                           float3(0));
+        return s;
+    }
 }
 
 struct QuakeMaterialSample : MaterialSample {
