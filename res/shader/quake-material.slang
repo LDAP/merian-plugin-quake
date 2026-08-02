@@ -86,23 +86,21 @@ struct QuakeMaterial : MaterialModel {
         }
 
         if (get_flags() == MAT_TYPE_WATERFALL) {
-            s.emission = albedo;
+            s._emission = half3(albedo);
             // } else if (get_flags() == MAT_TYPE_TELE || get_flags() == MAT_TYPE_SPRITE) {
             //     TODO: Fix on host side!
-            //     s.emission = ldr_to_hdr(albedo);
+            //     s._emission = half3(ldr_to_hdr(albedo));
         } else if (fullbright_tex != TextureID(-1)) {
-            s.emission = ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
+            s._emission = half3(ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb));
         } else {
-            s.emission = float3(0);
+            s._emission = half3(0);
         }
 
         if (gloss_tex != TextureID(-1)) {
             roughness = tm.get_sampler2D(gloss_tex).SampleLevel(uv, 0).r;
         }
-        const float alpha = ggx_roughness_to_alpha(max(roughness, merian_hint_min_roughness));
-        s.brdf = QuakeBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
-                               GGXBRDF(alpha), LambertDiffuseBRDF(float3(1.0f)), 0.02f),
-                           albedo);
+        s.alpha = half(ggx_roughness_to_alpha(max(roughness, merian_hint_min_roughness)));
+        s.tint = half3(albedo);
         return s;
     }
 
@@ -110,10 +108,9 @@ struct QuakeMaterial : MaterialModel {
     static QuakeMaterialSample make_emissive(const float3 emission, const float3 normal) {
         QuakeMaterialSample s;
         s.frame = OrthonormalFrame(normal);
-        s.emission = emission;
-        s.brdf = QuakeBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
-                               GGXBRDF(1.0f), LambertDiffuseBRDF(float3(1.0f)), 0.02f),
-                           float3(0));
+        s._emission = half3(emission);
+        s.tint = half3(0);
+        s.alpha = half(1.0f);
         return s;
     }
 }
@@ -121,12 +118,21 @@ struct QuakeMaterial : MaterialModel {
 struct QuakeMaterialSample : MaterialSample {
     typealias BSDFImpl = QuakeBSDF;
 
-    QuakeBSDF brdf;
+    // fp16 storage (evaluation stays fp32 through get_bsdf); halves the sample's live registers
+    half3 tint;
+    half alpha; // GGX alpha
+    half3 _emission;
     OrthonormalFrame frame;
-    float3 emission;
 
     BSDFImpl get_bsdf() {
-        return brdf;
+        return QuakeBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
+                             GGXBRDF(float(alpha)), LambertDiffuseBRDF(float3(1.0f)), 0.02f),
+                         float3(tint));
+    }
+    property float3 emission {
+        get {
+            return float3(_emission);
+        }
     }
     property OrthonormalFrame shading_frame {
         get {
