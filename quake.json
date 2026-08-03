@@ -191,6 +191,7 @@
                 "5": true,
                 "6": false,
                 "7": true,
+                "emission format": "R16G16B16A16Sfloat",
                 "height": 1080,
                 "width": 1920
             },
@@ -282,6 +283,7 @@
                 "kaleidoscope: shmem": true,
                 "mv sampling": "center",
                 "normal reject": 0.5235987901687622,
+                "overwrite format": "R16G16B16A16Sfloat",
                 "spatial bias": 8.0,
                 "spatial falloff": 3.0,
                 "z-bias depth": 0.0,
