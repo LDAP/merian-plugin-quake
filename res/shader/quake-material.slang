@@ -49,8 +49,11 @@ struct QuakeMaterial : MaterialModel {
         return flags;
     }
 
-    QuakeMaterialSample
-    get_sample(const ShadingData sd, const TextureManager tm, const LODSampler2D lod) {
+    QuakeMaterialSample get_sample(const ShadingData sd,
+                                   const TextureManager tm,
+                                   const LODSampler2D lod,
+                                   out float3 out_emission,
+                                   out OrthonormalFrame out_shading_frame) {
         // Normal
         QuakeMaterialSample s;
         if (normal_tex != TextureID(-1)) {
@@ -59,12 +62,12 @@ struct QuakeMaterial : MaterialModel {
             if (merian_hint_clamp_normals) {
                 const float3 clamped_n =
                     keller_clamp_normal(mapped.get_normal(), sd.face_normal, sd.wi);
-                s.frame = OrthonormalFrame(clamped_n, mapped.get_tangent());
+                out_shading_frame = OrthonormalFrame(clamped_n, mapped.get_tangent());
             } else {
-                s.frame = mapped;
+                out_shading_frame = mapped;
             }
         } else {
-            s.frame = sd.frame;
+            out_shading_frame = sd.frame;
         }
 
         // Albedo / Emission
@@ -86,14 +89,14 @@ struct QuakeMaterial : MaterialModel {
         }
 
         if (get_flags() == MAT_TYPE_WATERFALL) {
-            s.emission = albedo;
+            out_emission = albedo;
             // } else if (get_flags() == MAT_TYPE_TELE || get_flags() == MAT_TYPE_SPRITE) {
             //     TODO: Fix on host side!
-            //     s.emission = ldr_to_hdr(albedo);
+            //     out_emission = ldr_to_hdr(albedo);
         } else if (fullbright_tex != TextureID(-1)) {
-            s.emission = ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
+            out_emission = ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
         } else {
-            s.emission = float3(0);
+            out_emission = float3(0);
         }
 
         if (gloss_tex != TextureID(-1)) {
@@ -111,21 +114,9 @@ struct QuakeMaterialSample : MaterialSample {
     typealias BSDFImpl = QuakeBSDF;
 
     QuakeBSDF brdf;
-    OrthonormalFrame frame;
-    float3 emission;
 
     BSDFImpl get_bsdf() {
         return brdf;
-    }
-    property OrthonormalFrame shading_frame {
-        get {
-            return frame;
-        }
-    }
-    property float3 shading_normal {
-        get {
-            return frame.get_normal();
-        }
     }
 }
 
