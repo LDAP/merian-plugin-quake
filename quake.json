@@ -13,7 +13,6 @@
                         "/nodes/gbuffer/outputs": [
                             "emission->add.input_1",
                             "gbuffer->accumulate.gbuffer",
-                            "gbuffer->accumulate.prev_gbuffer",
                             "gbuffer->render.gbuffer",
                             "gbuffer->svgf.gbuffer"
                         ],
@@ -29,7 +28,6 @@
                         "/nodes/gbuffer/outputs": [
                             "emission->add.input_1",
                             "gbuffer->accumulate.gbuffer",
-                            "gbuffer->accumulate.prev_gbuffer",
                             "gbuffer->render.gbuffer",
                             "gbuffer->svgf.gbuffer"
                         ],
@@ -44,7 +42,6 @@
                         "/nodes/gbuffer/outputs": [
                             "emission->add.input_1",
                             "gbuffer->accumulate.gbuffer",
-                            "gbuffer->accumulate.prev_gbuffer",
                             "gbuffer->render.gbuffer",
                             "gbuffer->render.prev_gbuffer",
                             "gbuffer->svgf.gbuffer"
@@ -59,7 +56,6 @@
                         "/nodes/gbuffer/outputs": [
                             "emission->add.input_1",
                             "gbuffer->accumulate.gbuffer",
-                            "gbuffer->accumulate.prev_gbuffer",
                             "gbuffer->render.gbuffer",
                             "gbuffer->svgf.gbuffer"
                         ]
@@ -178,7 +174,6 @@
             "outputs": [
                 "emission->add.input_1",
                 "gbuffer->accumulate.gbuffer",
-                "gbuffer->accumulate.prev_gbuffer",
                 "gbuffer->render.gbuffer",
                 "gbuffer->svgf.gbuffer"
             ],
