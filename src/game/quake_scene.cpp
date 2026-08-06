@@ -599,6 +599,7 @@ void QuakeScene::cb_R_RenderScene() {
     }
     update_camera();
     update_sky();
+    update_fog();
 
     const bool in_game = key_dest == key_game;
     if (in_game != input_in_game) {
@@ -1044,6 +1045,30 @@ void QuakeScene::load_world_brushes() {
 
     SPDLOG_DEBUG("static world: {} partitions, {} surfaces, {} animated materials", buckets.size(),
                  world->nummodelsurfaces, world_animated_materials.size());
+}
+
+merian::HomogeneousVolume QuakeScene::get_fog() const {
+    merian::HomogeneousVolume medium;
+    if (mu_t_s_overwrite) {
+        medium.mu_t = merian::float3(mu_t);
+        medium.mu_s = mu_s_div_mu_t * mu_t;
+    } else {
+        // Quake authors fog as a density plus an LDR colour. The squared density matches the
+        // engine's falloff, the colour exponent the de-gamma the materials use.
+        const float density = std::pow(Fog_GetDensity(), 2.F) * 0.1F;
+        const float* color = Fog_GetColor();
+        medium.mu_t = merian::float3(density);
+        medium.mu_s = merian::float3(std::pow(color[0], 1.F / 1.2F), std::pow(color[1], 1.F / 1.2F),
+                                     std::pow(color[2], 1.F / 1.2F)) *
+                      density;
+    }
+    medium.particle_size_um = fog_particle_size_um;
+    medium.max_distance = volume_max_t;
+    return medium;
+}
+
+void QuakeScene::update_fog() {
+    set_exterior_medium(get_fog());
 }
 
 void QuakeScene::update_sky() {
@@ -1601,19 +1626,20 @@ void QuakeScene::properties(merian::Properties& config) {
         config.config_vec("sun dir", overwrite_sun_dir);
         config.config_vec("sun col", overwrite_sun_col);
     }
-    config.config_float("volume max t", volume_max_t);
+    config.config_float("volume max t", volume_max_t,
+                        "Distance at which the fog optical depth saturates, so distant sky is not "
+                        "fully extinguished.");
+    config.config_float("fog particle size", fog_particle_size_um,
+                        "Droplet diameter in micrometer driving the Mie phase function (5 - 50).",
+                        0.1F);
     config.config_bool("overwrite mu_t/s", mu_t_s_overwrite);
     if (mu_t_s_overwrite) {
         config.config_float("mu_t", mu_t, "", 0.000001);
         config.config_vec("mu_s / mu_t", mu_s_div_mu_t);
-    } else {
-        const float fog_t = std::pow(Fog_GetDensity(), 2.F) * 0.1F;
-        const float* fog_color = Fog_GetColor();
-        config.output_text(fmt::format("mu_t: {}\nmu_s: ({}, {}, {})", fog_t,
-                                       std::pow(fog_color[0], 1.F / 1.2F) * fog_t,
-                                       std::pow(fog_color[1], 1.F / 1.2F) * fog_t,
-                                       std::pow(fog_color[2], 1.F / 1.2F) * fog_t));
     }
+    const merian::HomogeneousVolume fog = get_fog();
+    config.output_text(fmt::format("mu_t: {}\nmu_s: ({}, {}, {})", fog.mu_t.x, fog.mu_s.r,
+                                   fog.mu_s.g, fog.mu_s.b));
     const merian::float3 sd =
         overwrite_sun ? overwrite_sun_dir : g_quake_data.current_sun_direction;
     const merian::float3 sc = overwrite_sun ? overwrite_sun_col : g_quake_data.current_sun_color;
