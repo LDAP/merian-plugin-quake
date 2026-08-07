@@ -118,7 +118,7 @@ class QuakeScene : public merian::Scene {
     void init_particle_batch();
     void update_sky();
     void update_fog();
-    merian::HomogeneousVolume get_fog() const;
+    merian::FogVolume get_fog() const;
 
     // --- Per-frame ---
     void update_entities(const merian::CommandBufferHandle& cmd);

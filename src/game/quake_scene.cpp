@@ -1047,28 +1047,34 @@ void QuakeScene::load_world_brushes() {
                  world->nummodelsurfaces, world_animated_materials.size());
 }
 
-merian::HomogeneousVolume QuakeScene::get_fog() const {
-    merian::HomogeneousVolume medium;
+merian::FogVolume QuakeScene::get_fog() const {
+    merian::FogVolume fog;
     if (mu_t_s_overwrite) {
-        medium.mu_t = merian::float3(mu_t);
-        medium.mu_s = mu_s_div_mu_t * mu_t;
+        fog.mu_t = merian::float3(mu_t);
+        fog.mu_s = mu_s_div_mu_t * mu_t;
     } else {
         // Quake authors fog as a density plus an LDR colour. The squared density matches the
         // engine's falloff, the colour exponent the de-gamma the materials use.
         const float density = std::pow(Fog_GetDensity(), 2.F) * 0.1F;
         const float* color = Fog_GetColor();
-        medium.mu_t = merian::float3(density);
-        medium.mu_s = merian::float3(std::pow(color[0], 1.F / 1.2F), std::pow(color[1], 1.F / 1.2F),
-                                     std::pow(color[2], 1.F / 1.2F)) *
-                      density;
+        fog.mu_t = merian::float3(density);
+        fog.mu_s = merian::float3(std::pow(color[0], 1.F / 1.2F), std::pow(color[1], 1.F / 1.2F),
+                                  std::pow(color[2], 1.F / 1.2F)) *
+                   density;
     }
-    medium.particle_size_um = fog_particle_size_um;
-    medium.max_distance = volume_max_t;
-    return medium;
+    fog.particle_size_um = fog_particle_size_um;
+    fog.max_distance = volume_max_t;
+    return fog;
 }
 
 void QuakeScene::update_fog() {
-    set_exterior_medium(get_fog());
+    const merian::FogVolume fog = get_fog();
+    // an all-zero extinction compiles the medium out of the renderers instead of scaling by one
+    if (fog.mu_t.x == 0.F && fog.mu_t.y == 0.F && fog.mu_t.z == 0.F) {
+        set_exterior_volume(std::make_shared<merian::VacuumVolume>());
+    } else {
+        set_exterior_volume(std::make_shared<merian::FogVolume>(fog));
+    }
 }
 
 void QuakeScene::update_sky() {
@@ -1637,7 +1643,7 @@ void QuakeScene::properties(merian::Properties& config) {
         config.config_float("mu_t", mu_t, "", 0.000001);
         config.config_vec("mu_s / mu_t", mu_s_div_mu_t);
     }
-    const merian::HomogeneousVolume fog = get_fog();
+    const merian::FogVolume fog = get_fog();
     config.output_text(fmt::format("mu_t: {}\nmu_s: ({}, {}, {})", fog.mu_t.x, fog.mu_s.r,
                                    fog.mu_s.g, fog.mu_s.b));
     const merian::float3 sd =
