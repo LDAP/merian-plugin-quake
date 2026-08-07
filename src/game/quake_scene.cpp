@@ -1055,7 +1055,7 @@ merian::FogVolume QuakeScene::get_fog() const {
     } else {
         // Quake authors fog as a density plus an LDR colour. The squared density matches the
         // engine's falloff, the colour exponent the de-gamma the materials use.
-        const float density = std::pow(Fog_GetDensity(), 2.F) * 0.1F;
+        const float density = std::pow(Fog_GetDensity(), 2.F) * fog_density_factor;
         const float* color = Fog_GetColor();
         fog.mu_t = merian::float3(density);
         fog.mu_s = merian::float3(std::pow(color[0], 1.F / 1.2F), std::pow(color[1], 1.F / 1.2F),
@@ -1636,8 +1636,12 @@ void QuakeScene::properties(merian::Properties& config) {
                         "Distance at which the fog optical depth saturates, so distant sky is not "
                         "fully extinguished.");
     config.config_float("fog particle size", fog_particle_size_um,
-                        "Droplet diameter in micrometer driving the Mie phase function (5 - 50).",
-                        0.1F);
+                        "Water droplet diameter in micrometer. Fog is roughly 5 - 15, cloud "
+                        "droplets reach 50; below 0.1 the phase function tends to Rayleigh.",
+                        0.1F, 0.001F, 50.F);
+    config.config_float("fog density factor", fog_density_factor,
+                        "Scales the engine fog density into an extinction coefficient.", 0.001F,
+                        0.F);
     config.config_bool("overwrite mu_t/s", mu_t_s_overwrite);
     if (mu_t_s_overwrite) {
         config.config_float("mu_t", mu_t, "", 0.000001);

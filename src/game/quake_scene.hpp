@@ -315,6 +315,7 @@ class QuakeScene : public merian::Scene {
     float mu_t = 0.0F;
     merian::float3 mu_s_div_mu_t{1};
     float fog_particle_size_um = 7.0F;
+    float fog_density_factor = 0.1F;
     bool reproducible_renders = false;
 
     merian::Scene::CameraID quake_camera;
