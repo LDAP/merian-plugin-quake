@@ -738,7 +738,7 @@ QuakeMaterial make_brush_material(texture_t* tex, int surf_flags) {
     QuakeMaterial m;
     // Sky brushes carry no surface textures — shading goes through the scene env map.
     if ((surf_flags & MAT_TYPE_SKY) != 0) {
-        m.header.alpha_texture_id = 0;
+        m.header.alpha_texture_id = QUAKE_NO_TEXTURE;
         m.payload.fullbright_tex = QUAKE_NO_TEXTURE;
         m.payload.normal_tex = QUAKE_NO_TEXTURE;
         m.payload.gloss_tex = QUAKE_NO_TEXTURE;
@@ -1024,9 +1024,10 @@ void QuakeScene::load_world_brushes() {
         mesh->name =
             fmt::format("worldspawn:{}", bucket.tex->name[0] != 0 ? bucket.tex->name : "unnamed");
         mesh->material_id = material_id;
+        const bool has_alpha = bucket.tex->gltexture != nullptr &&
+                               (bucket.tex->gltexture->flags & TEXPREF_ALPHA) != 0u;
         mesh->flags = merian::Scene::MeshFlags::FlipFacing;
-        if (bucket.tex->gltexture != nullptr &&
-            (bucket.tex->gltexture->flags & TEXPREF_ALPHA) == 0u) {
+        if (!has_alpha) {
             mesh->flags = mesh->flags | merian::Scene::MeshFlags::IsOpaque;
         }
         if ((bucket.surf_flags & MAT_TYPE_SKY) != 0) {
@@ -1413,6 +1414,8 @@ void QuakeScene::update_brush_entity(entity_t* ent,
             mesh->flags = merian::Scene::MeshFlags::FlipFacing;
             if (!part.has_alpha)
                 mesh->flags = mesh->flags | merian::Scene::MeshFlags::IsOpaque;
+            if ((part.surf_flags & MAT_TYPE_SKY) != 0)
+                mesh->flags = mesh->flags | merian::Scene::MeshFlags::UseEnvMap;
             mesh->instance_mask = instance_mask;
             mesh->vb = part.vb;
             mesh->ib = part.ib;
