@@ -49,6 +49,29 @@ struct QuakeMaterial : MaterialModel {
         return flags;
     }
 
+    override float3 get_emission(const ShadingData sd,
+                                 const TextureManager tm,
+                                 const LODSampler2D lod) {
+        float2 uv = sd.uv;
+        if ((flags & MAT_TYPE_WARP) != 0u) {
+            uv = quake_warp(uv, sd.time);
+            if (flags == MAT_TYPE_WATER) {
+                uv += quake_waves(uv, sd.time);
+            }
+        }
+
+        if (get_flags() == MAT_TYPE_WATERFALL) {
+            if (let albedo_tex_id = header.get_alpha_texture_id()) {
+                return pow(lod.sample(tm.get_sampler2D(albedo_tex_id), uv).rgb, 1. / 1.2);
+            }
+            return float3(1, 0, 1);
+        }
+        if (fullbright_tex != TextureID(-1)) {
+            return ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
+        }
+        return float3(0);
+    }
+
     QuakeMaterialSample get_sample(const ShadingData sd,
                                    const TextureManager tm,
                                    const LODSampler2D lod,
