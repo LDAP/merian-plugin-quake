@@ -599,6 +599,7 @@ void QuakeScene::cb_R_RenderScene() {
     }
     update_camera();
     update_sky();
+    update_fog();
 
     const bool in_game = key_dest == key_game;
     if (in_game != input_in_game) {
@@ -1044,6 +1045,36 @@ void QuakeScene::load_world_brushes() {
 
     SPDLOG_DEBUG("static world: {} partitions, {} surfaces, {} animated materials", buckets.size(),
                  world->nummodelsurfaces, world_animated_materials.size());
+}
+
+merian::FogVolume QuakeScene::get_fog() const {
+    merian::FogVolume fog;
+    if (mu_t_s_overwrite) {
+        fog.mu_t = merian::float3(mu_t);
+        fog.mu_s = mu_s_div_mu_t * mu_t;
+    } else {
+        // Quake authors fog as a density plus an LDR colour. The squared density matches the
+        // engine's falloff, the colour exponent the de-gamma the materials use.
+        const float density = std::pow(Fog_GetDensity(), 2.F) * fog_density_factor;
+        const float* color = Fog_GetColor();
+        fog.mu_t = merian::float3(density);
+        fog.mu_s = merian::float3(std::pow(color[0], 1.F / 1.2F), std::pow(color[1], 1.F / 1.2F),
+                                  std::pow(color[2], 1.F / 1.2F)) *
+                   density;
+    }
+    fog.particle_size_um = fog_particle_size_um;
+    fog.max_distance = volume_max_t;
+    return fog;
+}
+
+void QuakeScene::update_fog() {
+    const merian::FogVolume fog = get_fog();
+    // an all-zero extinction compiles the medium out of the renderers instead of scaling by one
+    if (fog.mu_t.x == 0.F && fog.mu_t.y == 0.F && fog.mu_t.z == 0.F) {
+        set_exterior_volume(std::make_shared<merian::VacuumVolume>());
+    } else {
+        set_exterior_volume(std::make_shared<merian::FogVolume>(fog));
+    }
 }
 
 void QuakeScene::update_sky() {
@@ -1601,19 +1632,24 @@ void QuakeScene::properties(merian::Properties& config) {
         config.config_vec("sun dir", overwrite_sun_dir);
         config.config_vec("sun col", overwrite_sun_col);
     }
-    config.config_float("volume max t", volume_max_t);
+    config.config_float("volume max t", volume_max_t,
+                        "Distance at which the fog optical depth saturates, so distant sky is not "
+                        "fully extinguished.");
+    config.config_float("fog particle size", fog_particle_size_um,
+                        "Water droplet diameter in micrometer. Fog is roughly 5 - 15, cloud "
+                        "droplets reach 50; below 0.1 the phase function tends to Rayleigh.",
+                        0.1F, 0.001F, 50.F);
+    config.config_float("fog density factor", fog_density_factor,
+                        "Scales the engine fog density into an extinction coefficient.", 0.001F,
+                        0.F);
     config.config_bool("overwrite mu_t/s", mu_t_s_overwrite);
     if (mu_t_s_overwrite) {
         config.config_float("mu_t", mu_t, "", 0.000001);
         config.config_vec("mu_s / mu_t", mu_s_div_mu_t);
-    } else {
-        const float fog_t = std::pow(Fog_GetDensity(), 2.F) * 0.1F;
-        const float* fog_color = Fog_GetColor();
-        config.output_text(fmt::format("mu_t: {}\nmu_s: ({}, {}, {})", fog_t,
-                                       std::pow(fog_color[0], 1.F / 1.2F) * fog_t,
-                                       std::pow(fog_color[1], 1.F / 1.2F) * fog_t,
-                                       std::pow(fog_color[2], 1.F / 1.2F) * fog_t));
     }
+    const merian::FogVolume fog = get_fog();
+    config.output_text(fmt::format("mu_t: {}\nmu_s: ({}, {}, {})", fog.mu_t.x, fog.mu_s.r,
+                                   fog.mu_s.g, fog.mu_s.b));
     const merian::float3 sd =
         overwrite_sun ? overwrite_sun_dir : g_quake_data.current_sun_direction;
     const merian::float3 sc = overwrite_sun ? overwrite_sun_col : g_quake_data.current_sun_color;
