@@ -21,7 +21,6 @@
 #include <map>
 #include <mutex>
 #include <optional>
-#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -62,17 +61,16 @@ struct QuakeData {
 QuakeData g_quake_data;
 
 // startup_commands is tokenized on whitespace into the engine command line
-// (e.g. "-game ad +skill 2 +map start"); lines starting with # are ignored.
+// (e.g. "-game ad +skill 2 +map start"); double quotes keep a token with spaces together and
+// lines starting with # are ignored.
 void init_quakespasm(const std::string& startup_commands) {
     std::vector<std::string>& tokens = g_quake_data.argv_tokens;
     tokens.assign(1, "quakespasm");
     merian::split(startup_commands, "\n", [&](const std::string& line) {
         if (line.starts_with("#"))
             return;
-        std::istringstream stream(line);
-        std::string token;
-        while (stream >> token)
-            tokens.push_back(token);
+        for (std::string& token : merian::split_args(line))
+            tokens.push_back(std::move(token));
     });
     std::vector<char*>& argv = g_quake_data.argv;
     argv.clear();
@@ -1612,8 +1610,9 @@ void QuakeScene::properties(merian::Properties& config) {
     }
     std::ignore = config.config_text_multiline(
         "startup commands", startup_commands, false,
-        "engine command line, e.g. '-game ad +skill 2 +map start'; whitespace separated, lines "
-        "starting with # are ignored; applied at engine startup");
+        "engine command line, e.g. '-game ad +skill 2 +map start'; whitespace separated, use "
+        "double quotes for values with spaces, lines starting with # are ignored; applied at "
+        "engine startup");
 
     config.config_options("filtering", default_filtering, {"nearest", "linear"},
                           merian::Properties::OptionsStyle::COMBO,
