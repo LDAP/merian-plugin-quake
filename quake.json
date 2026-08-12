@@ -4,11 +4,8 @@
             "pointer": "/nodes/quake/properties/startup commands"
         },
         "renderer": {
-            "default": "pt",
-            "type": "variant",
             "variants": {
                 "mcpg": {
-                    "merge": "renderers/mcpg.json",
                     "set": {
                         "/nodes/gbuffer/outputs": [
                             "emission->add.input_1",
@@ -43,7 +40,6 @@
                     }
                 },
                 "pt": {
-                    "merge": "renderers/pt.json",
                     "set": {
                         "/nodes/gbuffer/outputs": [
                             "emission->add.input_1",
@@ -57,7 +53,6 @@
                     }
                 },
                 "restir_di": {
-                    "merge": "renderers/restir_di.json",
                     "set": {
                         "/nodes/gbuffer/outputs": [
                             "emission->add.input_1",
@@ -71,7 +66,6 @@
                     }
                 },
                 "ssmm": {
-                    "merge": "renderers/ssmm.json",
                     "set": {
                         "/nodes/gbuffer/outputs": [
                             "emission->add.input_1",
@@ -91,6 +85,9 @@
         "iterations in flight": 2,
         "time overwrite": "None"
     },
+    "include": [
+        "renderers.json"
+    ],
     "nodes": {
         "accumulate": {
             "enabled": true,

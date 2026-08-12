@@ -1064,16 +1064,15 @@ merian::FogVolume QuakeScene::get_fog() const {
     merian::FogVolume fog;
     if (mu_t_s_overwrite) {
         fog.mu_t = merian::float3(mu_t);
-        fog.mu_s = mu_s_div_mu_t * mu_t;
+        fog.albedo = mu_s_div_mu_t;
     } else {
         // Quake authors fog as a density plus an LDR colour. The squared density matches the
         // engine's falloff, the colour exponent the de-gamma the materials use.
         const float density = std::pow(Fog_GetDensity(), 2.F) * fog_density_factor;
         const float* color = Fog_GetColor();
         fog.mu_t = merian::float3(density);
-        fog.mu_s = merian::float3(std::pow(color[0], 1.F / 1.2F), std::pow(color[1], 1.F / 1.2F),
-                                  std::pow(color[2], 1.F / 1.2F)) *
-                   density;
+        fog.albedo = merian::float3(std::pow(color[0], 1.F / 1.2F), std::pow(color[1], 1.F / 1.2F),
+                                    std::pow(color[2], 1.F / 1.2F));
     }
     fog.particle_size_um = fog_particle_size_um;
     fog.max_distance = volume_max_t;
@@ -1662,8 +1661,8 @@ void QuakeScene::properties(merian::Properties& config) {
         config.config_vec("mu_s / mu_t", mu_s_div_mu_t);
     }
     const merian::FogVolume fog = get_fog();
-    config.output_text(fmt::format("mu_t: {}\nmu_s: ({}, {}, {})", fog.mu_t.x, fog.mu_s.r,
-                                   fog.mu_s.g, fog.mu_s.b));
+    config.output_text(fmt::format("mu_t: {}\nalbedo: ({}, {}, {})", fog.mu_t.x, fog.albedo.r,
+                                   fog.albedo.g, fog.albedo.b));
     const merian::float3 sd =
         overwrite_sun ? overwrite_sun_dir : g_quake_data.current_sun_direction;
     const merian::float3 sc = overwrite_sun ? overwrite_sun_col : g_quake_data.current_sun_color;
