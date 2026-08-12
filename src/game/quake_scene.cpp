@@ -17,7 +17,9 @@
 #include <algorithm>
 #include <array>
 #include <csignal>
+#include <cstdint>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -60,6 +62,8 @@ struct QuakeData {
 };
 QuakeData g_quake_data;
 
+constexpr int DEFAULT_HEAP_SIZE = 1024 * 1024 * 1024;
+
 // startup_commands is tokenized on whitespace into the engine command line
 // (e.g. "-game ad +skill 2 +map start"); double quotes keep a token with spaces together and
 // lines starting with # are ignored.
@@ -81,12 +85,23 @@ void init_quakespasm(const std::string& startup_commands) {
     g_quake_data.params.argc = static_cast<int>(argv.size());
     g_quake_data.params.argv = argv.data();
     g_quake_data.params.errstate = 0;
-    g_quake_data.params.memsize = 256 * 1024 * 1024;
-    g_quake_data.params.membase = malloc(g_quake_data.params.memsize);
 
     srand(1337);
     COM_InitArgv(g_quake_data.params.argc, g_quake_data.params.argv);
     Sys_Init();
+
+    // -heapsize is in KiB; memsize is int, so an oversized request saturates instead of wrapping.
+    int64_t heap_size = DEFAULT_HEAP_SIZE;
+    if (const int parm = COM_CheckParm("-heapsize"); parm != 0 && parm + 1 < com_argc) {
+        heap_size = std::min<int64_t>(int64_t{Q_atoi(com_argv[parm + 1])} * 1024,
+                                      std::numeric_limits<int>::max());
+    }
+    g_quake_data.params.memsize = static_cast<int>(heap_size);
+    g_quake_data.params.membase = malloc(g_quake_data.params.memsize);
+    if (g_quake_data.params.membase == nullptr) {
+        throw std::runtime_error{fmt::format("could not allocate the {} MiB Quake heap",
+                                             g_quake_data.params.memsize / (1024 * 1024))};
+    }
 
     Sys_Printf("Quake %1.2f (c) id Software\n", VERSION);
     Sys_Printf("GLQuake %1.2f (c) id Software\n", GLQUAKE_VERSION);
