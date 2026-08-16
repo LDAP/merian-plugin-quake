@@ -19,6 +19,7 @@
                         ],
                         "/nodes/render/properties/demodulate albedo": true,
                         "/nodes/render/properties/emission on primary": false,
+                        "/nodes/render/properties/guiding prob": 0.9,
                         "/nodes/render/properties/lc/LC min pdf": 10,
                         "/nodes/render/properties/max path length": 3
                     }
