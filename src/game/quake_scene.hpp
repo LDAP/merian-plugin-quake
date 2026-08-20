@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game/quake_draw.hpp"
+#include "game/quake_extraction.hpp"
 #include "game/quake_material.hpp"
 
 #include "merian-shaders/scene/scene.hpp"
@@ -256,6 +257,9 @@ class QuakeScene : public merian::Scene {
 
         mspriteframe_t* cached_sprite_frame = nullptr;
 
+        // Frames the entity has been absent while its slot is kept collapsed at its last position.
+        uint32_t hidden_frames = 0;
+
         int cached_skinnum = -1;
         int cached_anim_frame = -1;
         int cached_pose1 = -1;
@@ -276,6 +280,10 @@ class QuakeScene : public merian::Scene {
 
     // Returns nullptr if the previous-frame slot is unusable (caller builds fresh).
     EntityMeshSlot* migrate_entity_slot(entity_t* ent);
+    // Slots of entities that vanished this frame stay collapsed at their last position for a
+    // grace period: intermittent effects (lightning beams, flashes) keep their geometry ids, so
+    // guiding lobes anchored to them survive the off frames.
+    static constexpr uint32_t HIDDEN_SLOT_GRACE_FRAMES = 32;
     void release_unused_entities();
     void destroy_slot(EntityMeshSlot& slot);
 
@@ -286,6 +294,7 @@ class QuakeScene : public merian::Scene {
     merian::Scene::NodeID particle_node_id = merian::Scene::NODE_ID_INVALID;
     merian::MaterialID particle_material_id = 0;
     bool particle_instance_attached = false;
+    ParticleSlots particle_slots;
     double prev_cl_time = 0.0;
 
     // Input.

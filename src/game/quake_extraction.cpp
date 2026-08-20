@@ -4,12 +4,14 @@
 #include "merian/utils/vector_matrix.hpp"
 #include "merian/utils/xorshift.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 extern "C" {
 #include "quakedef.h"
 
 extern particle_t* active_particles;
+extern particle_t* particles;
 extern cvar_t scr_fov, cl_gun_fovscale;
 }
 
@@ -112,11 +114,17 @@ bool sprite_world_basis(entity_t* ent,
     return true;
 }
 
-void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
-                          std::vector<merian::float3>& prev_positions,
-                          std::vector<merian::uint3>& indices,
-                          const bool no_random,
-                          const double prev_cl_time) {
+void ParticleSlots::clear() {
+    slots.clear();
+    slot_of_particle.clear();
+    free_slots.clear();
+}
+
+void ParticleSlots::extract(std::vector<merian::PackedVertexData>& vertices,
+                            std::vector<merian::float3>& prev_positions,
+                            std::vector<merian::uint3>& indices,
+                            const bool no_random,
+                            const double prev_cl_time) {
     static const merian::float3 voff[4] = {
         {0.0f, 1.0f, 0.0f},
         {-0.5f, -0.5f, 0.87f},
@@ -127,6 +135,58 @@ void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
     vec3_t vpn, vright, vup, r_origin;
     VectorCopy(r_refdef.vieworg, r_origin);
     AngleVectors(r_refdef.viewangles, vpn, vright, vup);
+
+    // 1. assign slots: a particle index stays bound to its slot until the particle dies
+    frame++;
+    for (particle_t* p = active_particles; p != nullptr; p = p->next) {
+        const uint32_t particle_index = static_cast<uint32_t>(p - particles);
+        if (particle_index >= slot_of_particle.size())
+            slot_of_particle.resize(particle_index + 1, SLOT_NONE);
+        uint32_t slot = slot_of_particle[particle_index];
+        if (slot == SLOT_NONE) {
+            while (!free_slots.empty() && free_slots.back() >= slots.size())
+                free_slots.pop_back();
+            if (free_slots.empty()) {
+                slot = static_cast<uint32_t>(slots.size());
+                slots.emplace_back();
+            } else {
+                slot = free_slots.back();
+                free_slots.pop_back();
+            }
+            slot_of_particle[particle_index] = slot;
+            slots[slot].particle_index = particle_index;
+        }
+        slots[slot].last_frame = frame;
+    }
+    for (uint32_t slot = 0; slot < slots.size(); slot++) {
+        Slot& s = slots[slot];
+        if (s.particle_index != SLOT_NONE && s.last_frame != frame) {
+            slot_of_particle[s.particle_index] = SLOT_NONE;
+            s.particle_index = SLOT_NONE;
+            free_slots.push_back(slot);
+        }
+    }
+    while (!slots.empty() && slots.back().particle_index == SLOT_NONE)
+        slots.pop_back();
+
+    // 2. geometry: dead slots keep a zero-area tetrahedron where the particle died
+    vertices.resize(slots.size() * 4);
+    prev_positions.resize(slots.size() * 4);
+    indices.resize(slots.size() * 4);
+    for (uint32_t slot = 0; slot < slots.size(); slot++) {
+        const uint32_t base = slot * 4;
+        indices[base + 0] = merian::uint3(base + 0, base + 1, base + 2);
+        indices[base + 1] = merian::uint3(base + 0, base + 2, base + 3);
+        indices[base + 2] = merian::uint3(base + 0, base + 3, base + 1);
+        indices[base + 3] = merian::uint3(base + 1, base + 3, base + 2);
+        if (slots[slot].particle_index != SLOT_NONE)
+            continue;
+        for (int k = 0; k < 4; k++) {
+            vertices[base + k] = merian::PackedVertexData{};
+            vertices[base + k].position = slots[slot].last_pos;
+            prev_positions[base + k] = slots[slot].last_pos;
+        }
+    }
 
     for (particle_t* p = active_particles; p != nullptr; p = p->next) {
         float scale = (p->org[0] - r_origin[0]) * vpn[0] + (p->org[1] - r_origin[1]) * vpn[1] +
@@ -170,9 +230,11 @@ void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
         }
         VectorCopy(p->org, p->mv_prev_origin);
 
-        // One tetrahedron per particle. uv.x is the palette index in [0,1] so the
-        // particle material samples the diffuse / emission palette by uv.
-        const uint32_t base = static_cast<uint32_t>(vertices.size());
+        // uv.x is the palette index in [0,1] so the particle material samples the diffuse /
+        // emission palette by uv.
+        const uint32_t slot = slot_of_particle[static_cast<uint32_t>(p - particles)];
+        slots[slot].last_pos = origin;
+        const uint32_t base = slot * 4;
         const float palette_uv =
             (static_cast<float>(static_cast<int>(p->color) & 0xff) + 0.5f) / 256.f;
         for (int k = 0; k < 4; k++) {
@@ -184,14 +246,9 @@ void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
             // face normal for billboard-style shading.
             const merian::float3 centroid = 0.25f * (vert[0] + vert[1] + vert[2] + vert[3]);
             pv.encoded_normal = merian::encode_normal(merian::normalize(vert[k] - centroid));
-            vertices.push_back(pv);
-            prev_positions.push_back(prev_vert[k]);
+            vertices[base + k] = pv;
+            prev_positions[base + k] = prev_vert[k];
         }
-
-        indices.push_back(merian::uint3(base + 0, base + 1, base + 2));
-        indices.push_back(merian::uint3(base + 0, base + 2, base + 3));
-        indices.push_back(merian::uint3(base + 0, base + 3, base + 1));
-        indices.push_back(merian::uint3(base + 1, base + 3, base + 2));
     }
 }
 

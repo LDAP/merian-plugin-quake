@@ -901,6 +901,7 @@ void QuakeScene::unload_world() {
         particle_node_id = merian::Scene::NODE_ID_INVALID;
     }
     particle_instance_attached = false;
+    particle_slots.clear();
     if (world_node_id != merian::Scene::NODE_ID_INVALID) {
         remove_node(world_node_id);
         world_node_id = merian::Scene::NODE_ID_INVALID;
@@ -1266,14 +1267,30 @@ QuakeScene::EntityMeshSlot* QuakeScene::migrate_entity_slot(entity_t* ent) {
         destroy_slot(node.mapped());
         return nullptr;
     }
+    node.mapped().hidden_frames = 0;
     auto inserted = entity_slots.insert(std::move(node));
     return &inserted.position->second;
 }
 
 void QuakeScene::release_unused_entities() {
-    for (auto& [_, slot] : previous_entity_slots)
-        destroy_slot(slot);
-    previous_entity_slots.clear();
+    for (auto it = previous_entity_slots.begin(); it != previous_entity_slots.end();) {
+        EntityMeshSlot& slot = it->second;
+        if (slot.hidden_frames >= HIDDEN_SLOT_GRACE_FRAMES ||
+            slot.node_id == merian::Scene::NODE_ID_INVALID) {
+            destroy_slot(slot);
+            it = previous_entity_slots.erase(it);
+            continue;
+        }
+        if (slot.hidden_frames == 0) {
+            const merian::float4x4& m = get_node(slot.node_id).local_transform;
+            update_node(slot.node_id,
+                        merian::mul(merian::translation(merian::float3(m[0][3], m[1][3], m[2][3])),
+                                    merian::scale(merian::float3(1e-3f))));
+        }
+        slot.hidden_frames++;
+        auto node = previous_entity_slots.extract(it++);
+        entity_slots.insert(std::move(node));
+    }
 }
 
 void QuakeScene::update_alias_entity(entity_t* ent,
@@ -1502,8 +1519,7 @@ void QuakeScene::update_sprite_entity(entity_t* ent) {
         slot = &it->second;
         current_entity_stats.sprite.newly_created++;
     } else if (frame != slot->cached_sprite_frame) {
-        remove_mesh_instance(slot->mesh_ids[0], slot->node_id);
-        add_mesh_instance(frame_it->second.mesh_id, slot->node_id);
+        replace_mesh_instance(slot->mesh_ids[0], frame_it->second.mesh_id, slot->node_id);
         slot->mesh_ids[0] = frame_it->second.mesh_id;
         slot->cached_sprite_frame = frame;
     }
@@ -1567,7 +1583,8 @@ void QuakeScene::update_particles() {
     mesh.indices.clear();
 
     std::vector<merian::float3> prev_pos;
-    extract_particle_geo(mesh.vertices, prev_pos, mesh.indices, reproducible_renders, prev_cl_time);
+    particle_slots.extract(mesh.vertices, prev_pos, mesh.indices, reproducible_renders,
+                           prev_cl_time);
     prev_cl_time = cl.time;
 
     mesh.prev_vertices.resize(prev_pos.size());

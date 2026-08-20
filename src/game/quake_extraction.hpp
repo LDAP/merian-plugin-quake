@@ -34,11 +34,31 @@ bool sprite_world_basis(entity_t* ent,
                         merian::float3& s_up,
                         merian::float3& s_right);
 
-// Particle billboards. `no_random` makes the per-particle jitter reproducible.
-void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
-                          std::vector<merian::float3>& prev_positions,
-                          std::vector<merian::uint3>& indices,
-                          bool no_random,
-                          double prev_cl_time);
+// Particle billboards, one tetrahedron per slot. A particle keeps its slot while it lives, so
+// its primitive ids stay consistent across frames; slots of dead particles collapse to zero-area
+// triangles until reused. `no_random` makes the per-particle jitter reproducible.
+class ParticleSlots {
+  public:
+    void extract(std::vector<merian::PackedVertexData>& vertices,
+                 std::vector<merian::float3>& prev_positions,
+                 std::vector<merian::uint3>& indices,
+                 bool no_random,
+                 double prev_cl_time);
+
+    void clear();
+
+  private:
+    static constexpr uint32_t SLOT_NONE = UINT32_MAX;
+
+    struct Slot {
+        uint32_t particle_index = SLOT_NONE; // index into Quake's particle array
+        uint32_t last_frame = 0;
+        merian::float3 last_pos{0.f};
+    };
+    std::vector<Slot> slots;
+    std::vector<uint32_t> slot_of_particle; // indexed by particle array index
+    std::vector<uint32_t> free_slots;
+    uint32_t frame = 0;
+};
 
 } // namespace merian_quake
