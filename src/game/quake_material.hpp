@@ -1,6 +1,7 @@
 #pragma once
 
 #include "merian-shaders/shading/materials/material_system.hpp"
+#include "../../res/shader/quake-material.slangh"
 
 #include <cstdint>
 #include <cstring>
@@ -42,6 +43,11 @@ struct QuakeMaterial : merian::Material {
 
     void write_payload(void* dest) const override {
         std::memcpy(dest, &payload, sizeof(QuakeMaterialPayload));
+    }
+
+    bool is_emissive() const override {
+        return payload.fullbright_tex != QUAKE_NO_TEXTURE ||
+               payload.surface_flags == MAT_TYPE_WATERFALL;
     }
 };
 

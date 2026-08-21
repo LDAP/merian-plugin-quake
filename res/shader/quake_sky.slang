@@ -5,10 +5,12 @@ import merian_shaders.distributions.von_mises_fisher;
 
 namespace merian {
 
+static const float QUAKE_SUN_KAPPA = 3000.0;
+
 float3 quake_sun(const float3 dir, const float3 sun_dir, const float3 sun_color) {
     float3 sun = float3(0);
     sun += 0.5hf * pow(0.5hf * (1.0hf + float16_t(dot(sun_dir, dir))), 4.0hf);
-    sun += 5.0hf * float16_t(vmf_pdf_tokuyoshi(dir, sun_dir, 3000.0));
+    sun += 5.0hf * float16_t(vmf_pdf_tokuyoshi(dir, sun_dir, QUAKE_SUN_KAPPA));
     return sun * sun_color;
 }
 
@@ -31,6 +33,7 @@ struct QuakeClassicSkyEnvMap : IEnvMap {
         }
         return emission;
     }
+
 }
 
 struct QuakeCubemapSkyEnvMap : IEnvMap {
@@ -87,6 +90,7 @@ struct QuakeCubemapSkyEnvMap : IEnvMap {
         }
         return emission;
     }
-}
 
 }
+
+} // namespace merian
