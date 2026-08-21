@@ -51,20 +51,16 @@ struct QuakeMaterial : MaterialModel {
 
     QuakeMaterialSample
     get_sample(const ShadingData sd, const TextureManager tm, const LODSampler2D lod) {
-        // Normal
+        // Normal (isotropic BSDF: only the normal matters, the frame is rebuilt on use)
         QuakeMaterialSample s;
         if (normal_tex != TextureID(-1)) {
             const float3 n = (tm.get_sampler2D(normal_tex).SampleLevel(sd.uv, 0).rgb - 0.5) * 2;
-            const OrthonormalFrame mapped = sd.frame.apply_normal_map(n);
-            if (merian_hint_clamp_normals) {
-                const float3 clamped_n =
-                    keller_clamp_normal(mapped.get_normal(), sd.face_normal, sd.wi);
-                s.frame = OrthonormalFrame(clamped_n, mapped.get_tangent());
-            } else {
-                s.frame = mapped;
-            }
+            const float3 mapped_n = sd.frame.apply_normal_map(n).get_normal();
+            s.normal = merian_hint_clamp_normals
+                           ? keller_clamp_normal(mapped_n, sd.face_normal, sd.wi)
+                           : mapped_n;
         } else {
-            s.frame = sd.frame;
+            s.normal = sd.frame.get_normal();
         }
 
         // Albedo / Emission
@@ -107,7 +103,7 @@ struct QuakeMaterial : MaterialModel {
     // the zero tint makes the BSDF evaluate to zero
     static QuakeMaterialSample make_emissive(const float3 emission, const float3 normal) {
         QuakeMaterialSample s;
-        s.frame = OrthonormalFrame(normal);
+        s.normal = normal;
         s._emission = half3(emission);
         s.tint = half3(0);
         s.alpha = half(1.0f);
@@ -122,7 +118,9 @@ struct QuakeMaterialSample : MaterialSample {
     half3 tint;
     half alpha; // GGX alpha
     half3 _emission;
-    OrthonormalFrame frame;
+    // isotropic BSDF: store only the shading normal; the frame is rebuilt on use, so the
+    // arbitrary tangent/bitangent are not carried across the path (register pressure)
+    float3 normal;
 
     BSDFImpl get_bsdf() {
         return QuakeBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
@@ -136,12 +134,12 @@ struct QuakeMaterialSample : MaterialSample {
     }
     property OrthonormalFrame shading_frame {
         get {
-            return frame;
+            return OrthonormalFrame(normal);
         }
     }
     property float3 shading_normal {
         get {
-            return frame.get_normal();
+            return normal;
         }
     }
 }
