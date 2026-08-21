@@ -1,7 +1,6 @@
 #pragma once
 
 #include "game/quake_draw.hpp"
-#include "game/quake_extraction.hpp"
 #include "game/quake_material.hpp"
 
 #include "merian-shaders/scene/scene.hpp"
@@ -294,7 +293,6 @@ class QuakeScene : public merian::Scene {
     merian::Scene::NodeID particle_node_id = merian::Scene::NODE_ID_INVALID;
     merian::MaterialID particle_material_id = 0;
     bool particle_instance_attached = false;
-    ParticleSlots particle_slots;
     double prev_cl_time = 0.0;
 
     // Input.

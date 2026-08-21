@@ -901,7 +901,6 @@ void QuakeScene::unload_world() {
         particle_node_id = merian::Scene::NODE_ID_INVALID;
     }
     particle_instance_attached = false;
-    particle_slots.clear();
     if (world_node_id != merian::Scene::NODE_ID_INVALID) {
         remove_node(world_node_id);
         world_node_id = merian::Scene::NODE_ID_INVALID;
@@ -1583,8 +1582,7 @@ void QuakeScene::update_particles() {
     mesh.indices.clear();
 
     std::vector<merian::float3> prev_pos;
-    particle_slots.extract(mesh.vertices, prev_pos, mesh.indices, reproducible_renders,
-                           prev_cl_time);
+    extract_particle_geo(mesh.vertices, prev_pos, mesh.indices, reproducible_renders, prev_cl_time);
     prev_cl_time = cl.time;
 
     mesh.prev_vertices.resize(prev_pos.size());
