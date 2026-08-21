@@ -49,22 +49,9 @@ struct QuakeMaterial : MaterialModel {
         return flags;
     }
 
-    QuakeMaterialSample
-    get_sample(const ShadingData sd, const TextureManager tm, const LODSampler2D lod) {
-        // Normal (isotropic BSDF: only the normal matters, the frame is rebuilt on use)
-        QuakeMaterialSample s;
-        if (normal_tex != TextureID(-1)) {
-            const float3 n = (tm.get_sampler2D(normal_tex).SampleLevel(sd.uv, 0).rgb - 0.5) * 2;
-            const float3 mapped_n = sd.frame.apply_normal_map(n).get_normal();
-            s.normal = merian_hint_clamp_normals
-                           ? keller_clamp_normal(mapped_n, sd.face_normal, sd.wi)
-                           : mapped_n;
-        } else {
-            s.normal = sd.frame.get_normal();
-        }
-
-        // Albedo / Emission
-        float roughness = 0.6f;
+    // texture coordinates after the per-surface warp; roughness follows the surface type
+    float2 get_uv(const ShadingData sd, out float roughness) {
+        roughness = 0.6f;
         float2 uv = sd.uv;
         if ((flags & MAT_TYPE_WARP) != 0u) {
             uv = quake_warp(uv, sd.time);
@@ -73,40 +60,69 @@ struct QuakeMaterial : MaterialModel {
                 roughness = 0.4f;
             }
         }
+        return uv;
+    }
 
+    float3 get_albedo(const float2 uv, const TextureManager tm, const LODSampler2D lod) {
         float3 albedo = float3(1, 0, 1);
         if (let albedo_tex_id = header.get_alpha_texture_id()) {
             albedo = lod.sample(tm.get_sampler2D(albedo_tex_id), uv).rgb;
             // desaturate for a better look
             albedo = pow(albedo, 1. / 1.2);
         }
+        return albedo;
+    }
 
+    float3 get_emission(const float2 uv,
+                        const float3 albedo,
+                        const TextureManager tm,
+                        const LODSampler2D lod) {
         if (get_flags() == MAT_TYPE_WATERFALL) {
-            s._emission = half3(albedo);
-            // } else if (get_flags() == MAT_TYPE_TELE || get_flags() == MAT_TYPE_SPRITE) {
-            //     TODO: Fix on host side!
-            //     s._emission = half3(ldr_to_hdr(albedo));
-        } else if (fullbright_tex != TextureID(-1)) {
-            s._emission = half3(ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb));
-        } else {
-            s._emission = half3(0);
+            return albedo;
         }
+        if (fullbright_tex != TextureID(-1)) {
+            return ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
+        }
+        return float3(0);
+    }
+
+    override float3 get_emission(const ShadingData sd,
+                                 const TextureManager tm,
+                                 const LODSampler2D lod) {
+        float roughness;
+        const float2 uv = get_uv(sd, roughness);
+        const bool needs_albedo = get_flags() == MAT_TYPE_WATERFALL;
+        return get_emission(uv, needs_albedo ? get_albedo(uv, tm, lod) : float3(0), tm, lod);
+    }
+
+    QuakeMaterialSample get_sample(const ShadingData sd,
+                                   const TextureManager tm,
+                                   const LODSampler2D lod,
+                                   out float3 out_emission,
+                                   out OrthonormalFrame out_shading_frame) {
+        // Normal (isotropic BSDF: only the normal matters, the frame is rebuilt on use)
+        if (normal_tex != TextureID(-1)) {
+            const float3 n = (tm.get_sampler2D(normal_tex).SampleLevel(sd.uv, 0).rgb - 0.5) * 2;
+            const float3 mapped_n = sd.frame.apply_normal_map(n).get_normal();
+            out_shading_frame = OrthonormalFrame(
+                merian_hint_clamp_normals ? keller_clamp_normal(mapped_n, sd.face_normal, sd.wi)
+                                          : mapped_n);
+        } else {
+            out_shading_frame = sd.frame;
+        }
+
+        float roughness;
+        const float2 uv = get_uv(sd, roughness);
+        const float3 albedo = get_albedo(uv, tm, lod);
+        out_emission = get_emission(uv, albedo, tm, lod);
 
         if (gloss_tex != TextureID(-1)) {
             roughness = tm.get_sampler2D(gloss_tex).SampleLevel(uv, 0).r;
         }
+
+        QuakeMaterialSample s;
         s.alpha = half(ggx_roughness_to_alpha(max(roughness, merian_hint_min_roughness)));
         s.tint = half3(albedo);
-        return s;
-    }
-
-    // the zero tint makes the BSDF evaluate to zero
-    static QuakeMaterialSample make_emissive(const float3 emission, const float3 normal) {
-        QuakeMaterialSample s;
-        s.normal = normal;
-        s._emission = half3(emission);
-        s.tint = half3(0);
-        s.alpha = half(1.0f);
         return s;
     }
 }
@@ -117,30 +133,11 @@ struct QuakeMaterialSample : MaterialSample {
     // fp16 storage (evaluation stays fp32 through get_bsdf); halves the sample's live registers
     half3 tint;
     half alpha; // GGX alpha
-    half3 _emission;
-    // isotropic BSDF: store only the shading normal; the frame is rebuilt on use, so the
-    // arbitrary tangent/bitangent are not carried across the path (register pressure)
-    float3 normal;
 
     BSDFImpl get_bsdf() {
         return QuakeBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
                              GGXBRDF(float(alpha)), LambertDiffuseBRDF(float3(1.0f)), 0.02f),
                          float3(tint));
-    }
-    property float3 emission {
-        get {
-            return float3(_emission);
-        }
-    }
-    property OrthonormalFrame shading_frame {
-        get {
-            return OrthonormalFrame(normal);
-        }
-    }
-    property float3 shading_normal {
-        get {
-            return normal;
-        }
     }
 }
 
