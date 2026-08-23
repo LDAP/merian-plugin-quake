@@ -117,6 +117,8 @@ class QuakeScene : public merian::Scene {
     void register_sprite_models();
     void init_particle_batch();
     void update_sky();
+    void update_fog();
+    merian::FogVolume get_fog() const;
 
     // --- Per-frame ---
     void update_entities(const merian::CommandBufferHandle& cmd);
@@ -312,6 +314,8 @@ class QuakeScene : public merian::Scene {
     bool mu_t_s_overwrite = false;
     float mu_t = 0.0F;
     merian::float3 mu_s_div_mu_t{1};
+    float fog_particle_size_um = 7.0F;
+    float fog_density_factor = 0.5F;
     bool reproducible_renders = false;
 
     merian::Scene::CameraID quake_camera;

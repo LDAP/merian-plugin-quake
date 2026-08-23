@@ -4,18 +4,35 @@
             "pointer": "/nodes/quake/properties/startup commands"
         },
         "renderer": {
-            "default": "pt",
-            "type": "variant",
             "variants": {
                 "mcpg": {
-                    "merge": "renderers/mcpg.json",
                     "set": {
                         "/nodes/gbuffer/outputs": [
                             "emission->add.input_1",
                             "gbuffer->accumulate.gbuffer",
-                            "gbuffer->accumulate.prev_gbuffer",
                             "gbuffer->render.gbuffer",
                             "gbuffer->svgf.gbuffer"
+                        ],
+                        "/nodes/render/properties/demodulate albedo": true,
+                        "/nodes/render/properties/emission on primary": false,
+                        "/nodes/render/properties/guiding prob": 0.9,
+                        "/nodes/render/properties/lc/LC min pdf": 10,
+                        "/nodes/render/properties/max path length": 3
+                    }
+                },
+                "mcpg_volume": {
+                    "merge": [
+                        "renderers/mcpg.json",
+                        "renderers/mcpg_volume.json"
+                    ],
+                    "set": {
+                        "/nodes/gbuffer/outputs": [
+                            "emission->add.input_1",
+                            "gbuffer->accumulate.gbuffer",
+                            "gbuffer->render.gbuffer",
+                            "gbuffer->svgf.gbuffer",
+                            "gbuffer->volume_accumulate.gbuffer",
+                            "gbuffer->volume_svgf.gbuffer"
                         ],
                         "/nodes/render/properties/demodulate albedo": true,
                         "/nodes/render/properties/emission on primary": false,
@@ -24,12 +41,10 @@
                     }
                 },
                 "pt": {
-                    "merge": "renderers/pt.json",
                     "set": {
                         "/nodes/gbuffer/outputs": [
                             "emission->add.input_1",
                             "gbuffer->accumulate.gbuffer",
-                            "gbuffer->accumulate.prev_gbuffer",
                             "gbuffer->render.gbuffer",
                             "gbuffer->svgf.gbuffer"
                         ],
@@ -39,12 +54,10 @@
                     }
                 },
                 "restir_di": {
-                    "merge": "renderers/restir_di.json",
                     "set": {
                         "/nodes/gbuffer/outputs": [
                             "emission->add.input_1",
                             "gbuffer->accumulate.gbuffer",
-                            "gbuffer->accumulate.prev_gbuffer",
                             "gbuffer->render.gbuffer",
                             "gbuffer->render.prev_gbuffer",
                             "gbuffer->svgf.gbuffer"
@@ -54,12 +67,10 @@
                     }
                 },
                 "ssmm": {
-                    "merge": "renderers/ssmm.json",
                     "set": {
                         "/nodes/gbuffer/outputs": [
                             "emission->add.input_1",
                             "gbuffer->accumulate.gbuffer",
-                            "gbuffer->accumulate.prev_gbuffer",
                             "gbuffer->render.gbuffer",
                             "gbuffer->svgf.gbuffer"
                         ]
@@ -75,6 +86,9 @@
         "iterations in flight": 2,
         "time overwrite": "None"
     },
+    "include": [
+        "renderers.json"
+    ],
     "nodes": {
         "accumulate": {
             "enabled": true,
@@ -178,7 +192,6 @@
             "outputs": [
                 "emission->add.input_1",
                 "gbuffer->accumulate.gbuffer",
-                "gbuffer->accumulate.prev_gbuffer",
                 "gbuffer->render.gbuffer",
                 "gbuffer->svgf.gbuffer"
             ],
@@ -191,6 +204,7 @@
                 "5": true,
                 "6": false,
                 "7": true,
+                "emission format": "R16G16B16A16Sfloat",
                 "height": 1080,
                 "width": 1920
             },
@@ -282,6 +296,7 @@
                 "kaleidoscope: shmem": true,
                 "mv sampling": "center",
                 "normal reject": 0.5235987901687622,
+                "overwrite format": "R16G16B16A16Sfloat",
                 "spatial bias": 8.0,
                 "spatial falloff": 3.0,
                 "z-bias depth": 0.0,

@@ -49,9 +49,52 @@ struct QuakeMaterial : MaterialModel {
         return flags;
     }
 
-    // texture coordinates after the per-surface warp; roughness follows the surface type
-    float2 get_uv(const ShadingData sd, out float roughness) {
-        roughness = 0.6f;
+    override float3 get_emission(const ShadingData sd,
+                                 const TextureManager tm,
+                                 const LODSampler2D lod) {
+        float2 uv = sd.uv;
+        if ((flags & MAT_TYPE_WARP) != 0u) {
+            uv = quake_warp(uv, sd.time);
+            if (flags == MAT_TYPE_WATER) {
+                uv += quake_waves(uv, sd.time);
+            }
+        }
+
+        if (get_flags() == MAT_TYPE_WATERFALL) {
+            if (let albedo_tex_id = header.get_alpha_texture_id()) {
+                return pow(lod.sample(tm.get_sampler2D(albedo_tex_id), uv).rgb, 1. / 1.2);
+            }
+            return float3(1, 0, 1);
+        }
+        if (fullbright_tex != TextureID(-1)) {
+            return ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
+        }
+        return float3(0);
+    }
+
+    QuakeMaterialSample get_sample(const ShadingData sd,
+                                   const TextureManager tm,
+                                   const LODSampler2D lod,
+                                   out float3 out_emission,
+                                   out OrthonormalFrame out_shading_frame) {
+        // Normal
+        QuakeMaterialSample s;
+        if (normal_tex != TextureID(-1)) {
+            const float3 n = (tm.get_sampler2D(normal_tex).SampleLevel(sd.uv, 0).rgb - 0.5) * 2;
+            const OrthonormalFrame mapped = sd.frame.apply_normal_map(n);
+            if (merian_hint_clamp_normals) {
+                const float3 clamped_n =
+                    keller_clamp_normal(mapped.get_normal(), sd.face_normal, sd.wi);
+                out_shading_frame = OrthonormalFrame(clamped_n, mapped.get_tangent());
+            } else {
+                out_shading_frame = mapped;
+            }
+        } else {
+            out_shading_frame = sd.frame;
+        }
+
+        // Albedo / Emission
+        float roughness = 0.6f;
         float2 uv = sd.uv;
         if ((flags & MAT_TYPE_WARP) != 0u) {
             uv = quake_warp(uv, sd.time);
@@ -60,69 +103,32 @@ struct QuakeMaterial : MaterialModel {
                 roughness = 0.4f;
             }
         }
-        return uv;
-    }
 
-    float3 get_albedo(const float2 uv, const TextureManager tm, const LODSampler2D lod) {
         float3 albedo = float3(1, 0, 1);
         if (let albedo_tex_id = header.get_alpha_texture_id()) {
             albedo = lod.sample(tm.get_sampler2D(albedo_tex_id), uv).rgb;
             // desaturate for a better look
             albedo = pow(albedo, 1. / 1.2);
         }
-        return albedo;
-    }
 
-    float3 get_emission(const float2 uv,
-                        const float3 albedo,
-                        const TextureManager tm,
-                        const LODSampler2D lod) {
         if (get_flags() == MAT_TYPE_WATERFALL) {
-            return albedo;
-        }
-        if (fullbright_tex != TextureID(-1)) {
-            return ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
-        }
-        return float3(0);
-    }
-
-    override float3 get_emission(const ShadingData sd,
-                                 const TextureManager tm,
-                                 const LODSampler2D lod) {
-        float roughness;
-        const float2 uv = get_uv(sd, roughness);
-        const bool needs_albedo = get_flags() == MAT_TYPE_WATERFALL;
-        return get_emission(uv, needs_albedo ? get_albedo(uv, tm, lod) : float3(0), tm, lod);
-    }
-
-    QuakeMaterialSample get_sample(const ShadingData sd,
-                                   const TextureManager tm,
-                                   const LODSampler2D lod,
-                                   out float3 out_emission,
-                                   out OrthonormalFrame out_shading_frame) {
-        // Normal (isotropic BSDF: only the normal matters, the frame is rebuilt on use)
-        if (normal_tex != TextureID(-1)) {
-            const float3 n = (tm.get_sampler2D(normal_tex).SampleLevel(sd.uv, 0).rgb - 0.5) * 2;
-            const float3 mapped_n = sd.frame.apply_normal_map(n).get_normal();
-            out_shading_frame = OrthonormalFrame(
-                merian_hint_clamp_normals ? keller_clamp_normal(mapped_n, sd.face_normal, sd.wi)
-                                          : mapped_n);
+            out_emission = albedo;
+            // } else if (get_flags() == MAT_TYPE_TELE || get_flags() == MAT_TYPE_SPRITE) {
+            //     TODO: Fix on host side!
+            //     out_emission = ldr_to_hdr(albedo);
+        } else if (fullbright_tex != TextureID(-1)) {
+            out_emission = ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
         } else {
-            out_shading_frame = sd.frame;
+            out_emission = float3(0);
         }
-
-        float roughness;
-        const float2 uv = get_uv(sd, roughness);
-        const float3 albedo = get_albedo(uv, tm, lod);
-        out_emission = get_emission(uv, albedo, tm, lod);
 
         if (gloss_tex != TextureID(-1)) {
             roughness = tm.get_sampler2D(gloss_tex).SampleLevel(uv, 0).r;
         }
-
-        QuakeMaterialSample s;
-        s.alpha = half(ggx_roughness_to_alpha(max(roughness, merian_hint_min_roughness)));
-        s.tint = half3(albedo);
+        const float alpha = ggx_roughness_to_alpha(roughness);
+        s.brdf = QuakeBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
+                               GGXBRDF(alpha), LambertDiffuseBRDF(float3(1.0f)), 0.02f),
+                           albedo);
         return s;
     }
 }
@@ -130,14 +136,10 @@ struct QuakeMaterial : MaterialModel {
 struct QuakeMaterialSample : MaterialSample {
     typealias BSDFImpl = QuakeBSDF;
 
-    // fp16 storage (evaluation stays fp32 through get_bsdf); halves the sample's live registers
-    half3 tint;
-    half alpha; // GGX alpha
+    QuakeBSDF brdf;
 
     BSDFImpl get_bsdf() {
-        return QuakeBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
-                             GGXBRDF(float(alpha)), LambertDiffuseBRDF(float3(1.0f)), 0.02f),
-                         float3(tint));
+        return brdf;
     }
 }
 

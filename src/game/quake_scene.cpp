@@ -17,11 +17,12 @@
 #include <algorithm>
 #include <array>
 #include <csignal>
+#include <cstdint>
 #include <cstring>
+#include <limits>
 #include <map>
 #include <mutex>
 #include <optional>
-#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 
@@ -61,18 +62,19 @@ struct QuakeData {
 };
 QuakeData g_quake_data;
 
+constexpr int DEFAULT_HEAP_SIZE = 1024 * 1024 * 1024;
+
 // startup_commands is tokenized on whitespace into the engine command line
-// (e.g. "-game ad +skill 2 +map start"); lines starting with # are ignored.
+// (e.g. "-game ad +skill 2 +map start"); double quotes keep a token with spaces together and
+// lines starting with # are ignored.
 void init_quakespasm(const std::string& startup_commands) {
     std::vector<std::string>& tokens = g_quake_data.argv_tokens;
     tokens.assign(1, "quakespasm");
     merian::split(startup_commands, "\n", [&](const std::string& line) {
         if (line.starts_with("#"))
             return;
-        std::istringstream stream(line);
-        std::string token;
-        while (stream >> token)
-            tokens.push_back(token);
+        for (std::string& token : merian::split_args(line))
+            tokens.push_back(std::move(token));
     });
     std::vector<char*>& argv = g_quake_data.argv;
     argv.clear();
@@ -83,12 +85,23 @@ void init_quakespasm(const std::string& startup_commands) {
     g_quake_data.params.argc = static_cast<int>(argv.size());
     g_quake_data.params.argv = argv.data();
     g_quake_data.params.errstate = 0;
-    g_quake_data.params.memsize = 256 * 1024 * 1024;
-    g_quake_data.params.membase = malloc(g_quake_data.params.memsize);
 
     srand(1337);
     COM_InitArgv(g_quake_data.params.argc, g_quake_data.params.argv);
     Sys_Init();
+
+    // -heapsize is in KiB; memsize is int, so an oversized request saturates instead of wrapping.
+    int64_t heap_size = DEFAULT_HEAP_SIZE;
+    if (const int parm = COM_CheckParm("-heapsize"); parm != 0 && parm + 1 < com_argc) {
+        heap_size = std::min<int64_t>(int64_t{Q_atoi(com_argv[parm + 1])} * 1024,
+                                      std::numeric_limits<int>::max());
+    }
+    g_quake_data.params.memsize = static_cast<int>(heap_size);
+    g_quake_data.params.membase = malloc(g_quake_data.params.memsize);
+    if (g_quake_data.params.membase == nullptr) {
+        throw std::runtime_error{fmt::format("could not allocate the {} MiB Quake heap",
+                                             g_quake_data.params.memsize / (1024 * 1024))};
+    }
 
     Sys_Printf("Quake %1.2f (c) id Software\n", VERSION);
     Sys_Printf("GLQuake %1.2f (c) id Software\n", GLQUAKE_VERSION);
@@ -599,6 +612,7 @@ void QuakeScene::cb_R_RenderScene() {
     }
     update_camera();
     update_sky();
+    update_fog();
 
     const bool in_game = key_dest == key_game;
     if (in_game != input_in_game) {
@@ -738,7 +752,7 @@ QuakeMaterial make_brush_material(texture_t* tex, int surf_flags) {
     QuakeMaterial m;
     // Sky brushes carry no surface textures — shading goes through the scene env map.
     if ((surf_flags & MAT_TYPE_SKY) != 0) {
-        m.header.alpha_texture_id = 0;
+        m.header.alpha_texture_id = QUAKE_NO_TEXTURE;
         m.payload.fullbright_tex = QUAKE_NO_TEXTURE;
         m.payload.normal_tex = QUAKE_NO_TEXTURE;
         m.payload.gloss_tex = QUAKE_NO_TEXTURE;
@@ -1024,9 +1038,10 @@ void QuakeScene::load_world_brushes() {
         mesh->name =
             fmt::format("worldspawn:{}", bucket.tex->name[0] != 0 ? bucket.tex->name : "unnamed");
         mesh->material_id = material_id;
+        const bool has_alpha = bucket.tex->gltexture != nullptr &&
+                               (bucket.tex->gltexture->flags & TEXPREF_ALPHA) != 0u;
         mesh->flags = merian::Scene::MeshFlags::FlipFacing;
-        if (bucket.tex->gltexture != nullptr &&
-            (bucket.tex->gltexture->flags & TEXPREF_ALPHA) == 0u) {
+        if (!has_alpha) {
             mesh->flags = mesh->flags | merian::Scene::MeshFlags::IsOpaque;
         }
         if ((bucket.surf_flags & MAT_TYPE_SKY) != 0) {
@@ -1043,6 +1058,35 @@ void QuakeScene::load_world_brushes() {
 
     SPDLOG_DEBUG("static world: {} partitions, {} surfaces, {} animated materials", buckets.size(),
                  world->nummodelsurfaces, world_animated_materials.size());
+}
+
+merian::FogVolume QuakeScene::get_fog() const {
+    merian::FogVolume fog;
+    if (mu_t_s_overwrite) {
+        fog.mu_t = merian::float3(mu_t);
+        fog.albedo = mu_s_div_mu_t;
+    } else {
+        // Quake authors fog as a density plus an LDR colour. The squared density matches the
+        // engine's falloff, the colour exponent the de-gamma the materials use.
+        const float density = std::pow(Fog_GetDensity(), 2.F) * fog_density_factor;
+        const float* color = Fog_GetColor();
+        fog.mu_t = merian::float3(density);
+        fog.albedo = merian::float3(std::pow(color[0], 1.F / 1.2F), std::pow(color[1], 1.F / 1.2F),
+                                    std::pow(color[2], 1.F / 1.2F));
+    }
+    fog.particle_size_um = fog_particle_size_um;
+    fog.max_distance = volume_max_t;
+    return fog;
+}
+
+void QuakeScene::update_fog() {
+    const merian::FogVolume fog = get_fog();
+    // an all-zero extinction compiles the medium out of the renderers instead of scaling by one
+    if (fog.mu_t.x == 0.F && fog.mu_t.y == 0.F && fog.mu_t.z == 0.F) {
+        set_exterior_volume(std::make_shared<merian::VacuumVolume>());
+    } else {
+        set_exterior_volume(std::make_shared<merian::FogVolume>(fog));
+    }
 }
 
 void QuakeScene::update_sky() {
@@ -1413,6 +1457,8 @@ void QuakeScene::update_brush_entity(entity_t* ent,
             mesh->flags = merian::Scene::MeshFlags::FlipFacing;
             if (!part.has_alpha)
                 mesh->flags = mesh->flags | merian::Scene::MeshFlags::IsOpaque;
+            if ((part.surf_flags & MAT_TYPE_SKY) != 0)
+                mesh->flags = mesh->flags | merian::Scene::MeshFlags::UseEnvMap;
             mesh->instance_mask = instance_mask;
             mesh->vb = part.vb;
             mesh->ib = part.ib;
@@ -1578,8 +1624,9 @@ void QuakeScene::properties(merian::Properties& config) {
     }
     std::ignore = config.config_text_multiline(
         "startup commands", startup_commands, false,
-        "engine command line, e.g. '-game ad +skill 2 +map start'; whitespace separated, lines "
-        "starting with # are ignored; applied at engine startup");
+        "engine command line, e.g. '-game ad +skill 2 +map start'; whitespace separated, use "
+        "double quotes for values with spaces, lines starting with # are ignored; applied at "
+        "engine startup");
 
     config.config_options("filtering", default_filtering, {"nearest", "linear"},
                           merian::Properties::OptionsStyle::COMBO,
@@ -1598,19 +1645,24 @@ void QuakeScene::properties(merian::Properties& config) {
         config.config_vec("sun dir", overwrite_sun_dir);
         config.config_vec("sun col", overwrite_sun_col);
     }
-    config.config_float("volume max t", volume_max_t);
+    config.config_float("volume max t", volume_max_t,
+                        "Distance at which the fog optical depth saturates, so distant sky is not "
+                        "fully extinguished.");
+    config.config_float("fog particle size", fog_particle_size_um,
+                        "Water droplet diameter in micrometer. Fog is roughly 5 - 15, cloud "
+                        "droplets reach 50; below 0.1 the phase function tends to Rayleigh.",
+                        0.1F, 0.001F, 50.F);
+    config.config_float("fog density factor", fog_density_factor,
+                        "Scales the engine fog density into an extinction coefficient.", 0.001F,
+                        0.F);
     config.config_bool("overwrite mu_t/s", mu_t_s_overwrite);
     if (mu_t_s_overwrite) {
         config.config_float("mu_t", mu_t, "", 0.000001);
         config.config_vec("mu_s / mu_t", mu_s_div_mu_t);
-    } else {
-        const float fog_t = std::pow(Fog_GetDensity(), 2.F) * 0.1F;
-        const float* fog_color = Fog_GetColor();
-        config.output_text(fmt::format("mu_t: {}\nmu_s: ({}, {}, {})", fog_t,
-                                       std::pow(fog_color[0], 1.F / 1.2F) * fog_t,
-                                       std::pow(fog_color[1], 1.F / 1.2F) * fog_t,
-                                       std::pow(fog_color[2], 1.F / 1.2F) * fog_t));
     }
+    const merian::FogVolume fog = get_fog();
+    config.output_text(fmt::format("mu_t: {}\nalbedo: ({}, {}, {})", fog.mu_t.x, fog.albedo.r,
+                                   fog.albedo.g, fog.albedo.b));
     const merian::float3 sd =
         overwrite_sun ? overwrite_sun_dir : g_quake_data.current_sun_direction;
     const merian::float3 sc = overwrite_sun ? overwrite_sun_col : g_quake_data.current_sun_color;
