@@ -61,10 +61,10 @@
                             "gbuffer->render.gbuffer",
                             "gbuffer->svgf.gbuffer"
                         ],
+                        "/nodes/guiding/properties/lc/LC min pdf": 10,
+                        "/nodes/guiding/properties/mc/guiding probability": 0.9,
                         "/nodes/render/properties/demodulate albedo": true,
                         "/nodes/render/properties/emission on primary": false,
-                        "/nodes/render/properties/guiding/lc/LC min pdf": 10,
-                        "/nodes/render/properties/guiding/mc/guiding probability": 0.9,
                         "/nodes/render/properties/max path length": 3
                     }
                 },
@@ -73,6 +73,7 @@
                         "/nodes/gbuffer/outputs": [
                             "emission->add.input_1",
                             "gbuffer->accumulate.gbuffer",
+                            "gbuffer->guiding.gbuffer",
                             "gbuffer->render.gbuffer",
                             "gbuffer->svgf.gbuffer"
                         ],
