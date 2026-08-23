@@ -5,41 +5,6 @@
         },
         "renderer": {
             "variants": {
-                "mcpg": {
-                    "set": {
-                        "/nodes/gbuffer/outputs": [
-                            "emission->add.input_1",
-                            "gbuffer->accumulate.gbuffer",
-                            "gbuffer->render.gbuffer",
-                            "gbuffer->svgf.gbuffer"
-                        ],
-                        "/nodes/render/properties/demodulate albedo": true,
-                        "/nodes/render/properties/emission on primary": false,
-                        "/nodes/render/properties/guiding prob": 0.9,
-                        "/nodes/render/properties/lc/LC min pdf": 10,
-                        "/nodes/render/properties/max path length": 3
-                    }
-                },
-                "mcpg_volume": {
-                    "merge": [
-                        "renderers/mcpg.json",
-                        "renderers/mcpg_volume.json"
-                    ],
-                    "set": {
-                        "/nodes/gbuffer/outputs": [
-                            "emission->add.input_1",
-                            "gbuffer->accumulate.gbuffer",
-                            "gbuffer->render.gbuffer",
-                            "gbuffer->svgf.gbuffer",
-                            "gbuffer->volume_accumulate.gbuffer",
-                            "gbuffer->volume_svgf.gbuffer"
-                        ],
-                        "/nodes/render/properties/demodulate albedo": true,
-                        "/nodes/render/properties/emission on primary": false,
-                        "/nodes/render/properties/lc/LC min pdf": 10,
-                        "/nodes/render/properties/max path length": 3
-                    }
-                },
                 "pt": {
                     "set": {
                         "/nodes/gbuffer/outputs": [
@@ -63,6 +28,35 @@
                         ],
                         "/nodes/guiding/properties/lc/LC min pdf": 10,
                         "/nodes/guiding/properties/mc/guiding probability": 0.9,
+                        "/nodes/render/properties/demodulate albedo": true,
+                        "/nodes/render/properties/emission on primary": false,
+                        "/nodes/render/properties/max path length": 3
+                    }
+                },
+                "pt_mcpg_volume": {
+                    "merge": [
+                        "renderers/pt.json",
+                        "renderers/pt_mcpg.json",
+                        "renderers/pt_volume.json"
+                    ],
+                    "set": {
+                        "/nodes/gbuffer/outputs": [
+                            "emission->add.input_1",
+                            "gbuffer->accumulate.gbuffer",
+                            "gbuffer->distance_guiding.gbuffer",
+                            "gbuffer->render.gbuffer",
+                            "gbuffer->svgf.gbuffer",
+                            "gbuffer->volume_accumulate.gbuffer",
+                            "gbuffer->volume_svgf.gbuffer"
+                        ],
+                        "/nodes/guiding/properties/lc/LC min pdf": 10,
+                        "/nodes/quake/outputs": [
+                            "scene->distance_guiding.scene",
+                            "scene->gbuffer.scene",
+                            "scene->render.scene",
+                            "scene->ui.scene",
+                            "ui_draw_commands->ui.ui_draw_commands"
+                        ],
                         "/nodes/render/properties/demodulate albedo": true,
                         "/nodes/render/properties/emission on primary": false,
                         "/nodes/render/properties/max path length": 3
@@ -93,16 +87,6 @@
                         ],
                         "/nodes/render/properties/demodulate albedo": true,
                         "/nodes/render/properties/emission on primary": false
-                    }
-                },
-                "ssmm": {
-                    "set": {
-                        "/nodes/gbuffer/outputs": [
-                            "emission->add.input_1",
-                            "gbuffer->accumulate.gbuffer",
-                            "gbuffer->render.gbuffer",
-                            "gbuffer->svgf.gbuffer"
-                        ]
                     }
                 }
             }
