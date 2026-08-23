@@ -125,7 +125,7 @@ struct QuakeMaterial : MaterialModel {
         if (gloss_tex != TextureID(-1)) {
             roughness = tm.get_sampler2D(gloss_tex).SampleLevel(uv, 0).r;
         }
-        const float alpha = ggx_roughness_to_alpha(max(roughness, merian_hint_min_roughness));
+        const float alpha = ggx_roughness_to_alpha(roughness);
         s.brdf = QuakeBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
                                GGXBRDF(alpha), LambertDiffuseBRDF(float3(1.0f)), 0.02f),
                            albedo);
