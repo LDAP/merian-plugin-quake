@@ -57,7 +57,8 @@ QuakeNode::describe_outputs([[maybe_unused]] const merian::NodeIOLayout& io_layo
     }
 
     scene->update(cmd, static_cast<float>(info.get_elapsed()),
-                  static_cast<float>(info.get_time_delta()), info.get_total_iteration());
+                  static_cast<float>(info.get_time_delta()), info.get_total_iteration(),
+                  info.get_shader_object_allocator());
 
     io[con_ui_draw_commands] = scene->get_ui_draw_commands();
     return {};
