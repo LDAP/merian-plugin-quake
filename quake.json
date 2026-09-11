@@ -3,33 +3,35 @@
         "--": {
             "pointer": "/nodes/quake/properties/startup commands"
         },
+        "denoiser": {
+            "default": "svgf",
+            "type": "variant",
+            "variants": {
+                "dlss": {
+                    "merge": "denoisers/dlss.json"
+                },
+                "dlss_volume": {
+                    "merge": [
+                        "denoisers/dlss.json",
+                        "denoisers/dlss_volume.json"
+                    ]
+                },
+                "svgf": {}
+            }
+        },
         "renderer": {
             "variants": {
                 "pt": {
                     "set": {
-                        "/nodes/gbuffer/outputs": [
-                            "emission->add.input_1",
-                            "gbuffer->accumulate.gbuffer",
-                            "gbuffer->render.gbuffer",
-                            "gbuffer->svgf.gbuffer"
-                        ],
-                        "/nodes/render/properties/demodulate albedo": true,
                         "/nodes/render/properties/emission on primary": false,
                         "/nodes/render/properties/max path length": 3
                     }
                 },
                 "pt_mcpg": {
                     "set": {
-                        "/nodes/gbuffer/outputs": [
-                            "emission->add.input_1",
-                            "gbuffer->accumulate.gbuffer",
-                            "gbuffer->render.gbuffer",
-                            "gbuffer->svgf.gbuffer"
-                        ],
                         "/nodes/guiding/properties/lc/LC min pdf": 10,
                         "/nodes/guiding/properties/mc/guiding probability": 0.9,
                         "/nodes/guiding/properties/mc/width confidence z": 0,
-                        "/nodes/render/properties/demodulate albedo": true,
                         "/nodes/render/properties/emission on primary": false,
                         "/nodes/render/properties/max path length": 3
                     }
@@ -38,56 +40,24 @@
                     "merge": [
                         "renderers/pt.json",
                         "renderers/pt_mcpg.json",
-                        "renderers/pt_volume.json"
+                        "renderers/pt_volume.json",
+                        "renderers/mcpg_volume.json"
                     ],
                     "set": {
-                        "/nodes/gbuffer/outputs": [
-                            "emission->add.input_1",
-                            "gbuffer->accumulate.gbuffer",
-                            "gbuffer->distance_guiding.gbuffer",
-                            "gbuffer->render.gbuffer",
-                            "gbuffer->svgf.gbuffer",
-                            "gbuffer->volume_accumulate.gbuffer",
-                            "gbuffer->volume_svgf.gbuffer"
-                        ],
                         "/nodes/guiding/properties/lc/LC min pdf": 10,
                         "/nodes/guiding/properties/mc/width confidence z": 0,
-                        "/nodes/quake/outputs": [
-                            "scene->distance_guiding.scene",
-                            "scene->gbuffer.scene",
-                            "scene->render.scene",
-                            "scene->ui.scene",
-                            "ui_draw_commands->ui.ui_draw_commands"
-                        ],
-                        "/nodes/render/properties/demodulate albedo": true,
                         "/nodes/render/properties/emission on primary": false,
                         "/nodes/render/properties/max path length": 3
                     }
                 },
                 "pt_ssmm": {
                     "set": {
-                        "/nodes/gbuffer/outputs": [
-                            "emission->add.input_1",
-                            "gbuffer->accumulate.gbuffer",
-                            "gbuffer->guiding.gbuffer",
-                            "gbuffer->render.gbuffer",
-                            "gbuffer->svgf.gbuffer"
-                        ],
-                        "/nodes/render/properties/demodulate albedo": true,
                         "/nodes/render/properties/emission on primary": false,
                         "/nodes/render/properties/max path length": 3
                     }
                 },
                 "restir_di": {
                     "set": {
-                        "/nodes/gbuffer/outputs": [
-                            "emission->add.input_1",
-                            "gbuffer->accumulate.gbuffer",
-                            "gbuffer->render.gbuffer",
-                            "gbuffer->render.prev_gbuffer",
-                            "gbuffer->svgf.gbuffer"
-                        ],
-                        "/nodes/render/properties/demodulate albedo": true,
                         "/nodes/render/properties/emission on primary": false
                     }
                 }
@@ -288,6 +258,11 @@
                 "volume max t": 1000.0
             },
             "type": "Quake"
+        },
+        "render": {
+            "properties": {
+                "demodulate albedo": true
+            }
         },
         "svgf": {
             "enabled": true,

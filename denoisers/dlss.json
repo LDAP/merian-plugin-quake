@@ -1,0 +1,59 @@
+{
+    "nodes": {
+        "accumulate": {
+            "enabled": false,
+            "outputs": []
+        },
+        "add": {
+            "outputs": [
+                "out->dlss.src"
+            ]
+        },
+        "dlss": {
+            "enabled": true,
+            "outputs": [
+                "out->exposure.src",
+                "out->ui.extent_ref"
+            ],
+            "properties": {
+                "ray reconstruction": true
+            },
+            "type": "DLSS"
+        },
+        "fxaa": {
+            "enabled": false,
+            "outputs": []
+        },
+        "gbuffer": {
+            "$+$outputs": [
+                "gbuffer->dlss.gbuffer"
+            ],
+            "properties": {
+                "texture lod bias": -1.0
+            }
+        },
+        "quake": {
+            "$+$outputs": [
+                "scene->dlss.scene"
+            ]
+        },
+        "render": {
+            "$+$outputs": [
+                "irradiance->add.input_0",
+                "specular_hit_distance->dlss.specular_hit_distance"
+            ],
+            "properties": {
+                "demodulate albedo": false
+            }
+        },
+        "svgf": {
+            "enabled": false,
+            "outputs": []
+        },
+        "tonemap": {
+            "outputs": [
+                "out->composite.input_0"
+            ]
+        }
+    }
+}

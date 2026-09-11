@@ -1,0 +1,17 @@
+{
+    "nodes": {
+        "render": {
+            "$+$outputs": [
+                "volume->add.input_2"
+            ]
+        },
+        "volume_accumulate": {
+            "enabled": false,
+            "outputs": []
+        },
+        "volume_svgf": {
+            "enabled": false,
+            "outputs": []
+        }
+    }
+}
