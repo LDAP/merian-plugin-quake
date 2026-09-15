@@ -143,7 +143,8 @@ void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
 
         const float velocity = merian::length(merian::as_float3(p->vel));
         const merian::float3 origin = merian::as_float3(p->org);
-        const merian::float3 prev_origin = merian::as_float3(p->mv_prev_origin);
+        const merian::float3 prev_origin =
+            p->mv_prev_valid ? merian::as_float3(p->mv_prev_origin) : origin;
 
         const float particle_offset = static_cast<float>(2.0 * (xrand.next_double() - 0.5) +
                                                          2.0 * (xrand.next_double() - 0.5));
@@ -154,9 +155,9 @@ void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
 
         const merian::float4x4 rot = merian::rotation(
             rand_v, (rand_angle + cl.time * 0.001f * velocity) * 2.f * static_cast<float>(M_PI));
+        const double prev_time = p->mv_prev_valid ? prev_cl_time : cl.time;
         const merian::float4x4 prev_rot = merian::rotation(
-            rand_v, (rand_angle + static_cast<float>(prev_cl_time) * 0.001f * velocity) * 2.f *
-                        static_cast<float>(M_PI));
+            rand_v, (rand_angle + prev_time * 0.001f * velocity) * 2.f * static_cast<float>(M_PI));
 
         merian::float3 vert[4];
         merian::float3 prev_vert[4];
@@ -169,6 +170,7 @@ void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
             prev_vert[k] = prev_origin + particle_offset + merian::mul(prev_rot, corner).xyz();
         }
         VectorCopy(p->org, p->mv_prev_origin);
+        p->mv_prev_valid = true;
 
         // One tetrahedron per particle. uv.x is the palette index in [0,1] so the
         // particle material samples the diffuse / emission palette by uv.
