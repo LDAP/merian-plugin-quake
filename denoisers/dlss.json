@@ -1,9 +1,21 @@
 {
+    "cli": {
+        "volume": {
+            "default": "off",
+            "type": "variant",
+            "variants": {
+                "off": {},
+                "on": {
+                    "merge": [
+                        "renderers/volume.json",
+                        "renderers/mcpg_volume.json",
+                        "denoisers/dlss_volume.json"
+                    ]
+                }
+            }
+        }
+    },
     "nodes": {
-        "accumulate": {
-            "enabled": false,
-            "outputs": []
-        },
         "add": {
             "outputs": [
                 "out->dlss.src"
@@ -16,13 +28,9 @@
                 "out->ui.extent_ref"
             ],
             "properties": {
-                "ray reconstruction": true
+                "mode": "ray reconstruction"
             },
             "type": "DLSS"
-        },
-        "fxaa": {
-            "enabled": false,
-            "outputs": []
         },
         "gbuffer": {
             "$+$outputs": [
@@ -45,10 +53,6 @@
             "properties": {
                 "demodulate albedo": false
             }
-        },
-        "svgf": {
-            "enabled": false,
-            "outputs": []
         },
         "tonemap": {
             "outputs": [

@@ -10,13 +10,9 @@
                 "dlss": {
                     "merge": "denoisers/dlss.json"
                 },
-                "dlss_volume": {
-                    "merge": [
-                        "denoisers/dlss.json",
-                        "denoisers/dlss_volume.json"
-                    ]
-                },
-                "svgf": {}
+                "svgf": {
+                    "merge": "denoisers/svgf.json"
+                }
             }
         },
         "renderer": {
@@ -31,20 +27,6 @@
                     "set": {
                         "/nodes/guiding/properties/lc/LC min pdf": 10,
                         "/nodes/guiding/properties/mc/guiding probability": 0.9,
-                        "/nodes/guiding/properties/mc/width confidence z": 0,
-                        "/nodes/render/properties/emission on primary": false,
-                        "/nodes/render/properties/max path length": 3
-                    }
-                },
-                "pt_mcpg_volume": {
-                    "merge": [
-                        "renderers/pt.json",
-                        "renderers/pt_mcpg.json",
-                        "renderers/pt_volume.json",
-                        "renderers/mcpg_volume.json"
-                    ],
-                    "set": {
-                        "/nodes/guiding/properties/lc/LC min pdf": 10,
                         "/nodes/guiding/properties/mc/width confidence z": 0,
                         "/nodes/render/properties/emission on primary": false,
                         "/nodes/render/properties/max path length": 3
@@ -75,44 +57,8 @@
         "renderers.json"
     ],
     "nodes": {
-        "accumulate": {
-            "enabled": true,
-            "outputs": [
-                "history->accumulate.prev_history",
-                "history->svgf.history",
-                "out->accumulate.prev_out",
-                "out->svgf.src",
-                "out->ui.extent_ref"
-            ],
-            "properties": {
-                "IPR factor": 50.0,
-                "adaptivity": 0.9009900093078613,
-                "adaptivity IPR factor": 3.0,
-                "adaptivity percentile lower": 0.1902180016040802,
-                "adaptivity percentile upper": 0.9065219759941101,
-                "alpha": 0.9509999752044678,
-                "clear event pattern": "/user/clear",
-                "depth threshold": 0.026403000578284264,
-                "extended search": true,
-                "filter mode": "stochastic bilinear",
-                "firefly filter bias": 0.20000000298023224,
-                "firefly filter enable": true,
-                "firefly percentile lower": 0.25,
-                "firefly percentile upper": 0.8999999761581421,
-                "gbuffer check": "always",
-                "hard clamp": "inf",
-                "max history": "inf",
-                "normal threshold": 0.645771861076355,
-                "reuse border": true,
-                "use motion vectors": true
-            },
-            "type": "Accumulate"
-        },
         "add": {
             "enabled": true,
-            "outputs": [
-                "out->exposure.src"
-            ],
             "properties": {
                 "initial value": "",
                 "number inputs": 2,
@@ -165,20 +111,11 @@
             },
             "type": "Exposure"
         },
-        "fxaa": {
-            "enabled": true,
-            "outputs": [
-                "out->composite.input_0"
-            ],
-            "type": "FXAA"
-        },
         "gbuffer": {
             "enabled": true,
             "outputs": [
                 "emission->add.input_1",
-                "gbuffer->accumulate.gbuffer",
-                "gbuffer->render.gbuffer",
-                "gbuffer->svgf.gbuffer"
+                "gbuffer->render.gbuffer"
             ],
             "properties": {
                 "0": true,
@@ -259,46 +196,8 @@
             },
             "type": "Quake"
         },
-        "render": {
-            "properties": {
-                "demodulate albedo": true
-            }
-        },
-        "svgf": {
-            "enabled": true,
-            "outputs": [
-                "out->add.input_0",
-                "out->svgf.prev_out"
-            ],
-            "properties": {
-                "SVGF iterations": 5,
-                "TAA alpha": 0.5,
-                "clamping": "min-max",
-                "debug": "none",
-                "depth accept": 40.0,
-                "enable motion vectors": true,
-                "filter": "none",
-                "filter depth": 40.0,
-                "filter luminance": 3.0,
-                "filter normals": 0.5235987901687622,
-                "filter type": "subsampled",
-                "kaleidoscope": false,
-                "kaleidoscope: shmem": true,
-                "mv sampling": "center",
-                "normal reject": 0.5235987901687622,
-                "overwrite format": "R16G16B16A16Sfloat",
-                "spatial bias": 8.0,
-                "spatial falloff": 3.0,
-                "z-bias depth": 0.0,
-                "z-bias normals": 3000.0
-            },
-            "type": "Denoiser (SVGF)"
-        },
         "tonemap": {
             "enabled": true,
-            "outputs": [
-                "out->fxaa.src"
-            ],
             "properties": {
                 "alpha mode": "Perceptual luminance",
                 "clamp output": true,
