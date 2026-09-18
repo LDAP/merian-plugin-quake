@@ -19,8 +19,13 @@
             "variants": {
                 "pt": {
                     "set": {
+                        "/nodes/quake/properties/lights/selection": "grid",
+                        "/nodes/render/properties/NEE candidates": 0,
+                        "/nodes/render/properties/NEE grid candidates": 1,
+                        "/nodes/render/properties/NEE probability": 0.8,
                         "/nodes/render/properties/emission on primary": false,
-                        "/nodes/render/properties/max path length": 3
+                        "/nodes/render/properties/max path length": 3,
+                        "/nodes/render/properties/next event estimation": "mixture"
                     }
                 },
                 "pt_mcpg": {
@@ -28,14 +33,24 @@
                         "/nodes/guiding/properties/lc/LC min pdf": 10,
                         "/nodes/guiding/properties/mc/guiding probability": 0.9,
                         "/nodes/guiding/properties/mc/width confidence z": 0,
+                        "/nodes/quake/properties/lights/selection": "grid",
+                        "/nodes/render/properties/NEE candidates": 0,
+                        "/nodes/render/properties/NEE grid candidates": 1,
+                        "/nodes/render/properties/NEE probability": 0.8,
                         "/nodes/render/properties/emission on primary": false,
-                        "/nodes/render/properties/max path length": 3
+                        "/nodes/render/properties/max path length": 3,
+                        "/nodes/render/properties/next event estimation": "mixture"
                     }
                 },
                 "pt_ssmm": {
                     "set": {
+                        "/nodes/quake/properties/lights/selection": "grid",
+                        "/nodes/render/properties/NEE candidates": 0,
+                        "/nodes/render/properties/NEE grid candidates": 1,
+                        "/nodes/render/properties/NEE probability": 0.8,
                         "/nodes/render/properties/emission on primary": false,
-                        "/nodes/render/properties/max path length": 3
+                        "/nodes/render/properties/max path length": 3,
+                        "/nodes/render/properties/next event estimation": "mixture"
                     }
                 },
                 "restir_di": {
