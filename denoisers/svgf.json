@@ -72,7 +72,9 @@
                 "irradiance->accumulate.src"
             ],
             "properties": {
-                "demodulate albedo": true
+                "output": {
+                    "demodulate albedo": true
+                }
             }
         },
         "svgf": {
