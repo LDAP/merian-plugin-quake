@@ -47,8 +47,7 @@
         },
         "render": {
             "$+$outputs": [
-                "irradiance->add.input_0",
-                "specular_hit_distance->dlss.specular_hit_distance"
+                "irradiance->add.input_0"
             ],
             "properties": {
                 "output": {
