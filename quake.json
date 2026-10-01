@@ -19,9 +19,9 @@
             "variants": {
                 "pt": {
                     "set": {
-                        "/nodes/quake/properties/lights/cell_grid/candidates": 1,
-                        "/nodes/quake/properties/lights/cell_grid/enable": true,
-                        "/nodes/quake/properties/lights/pool/candidates": 0,
+                        "/nodes/quake/properties/lights/cell draws": 1,
+                        "/nodes/quake/properties/lights/cells/enable": true,
+                        "/nodes/quake/properties/lights/scene draws": 0,
                         "/nodes/render/properties/max path length": 3,
                         "/nodes/render/properties/nee/mode": "mixture",
                         "/nodes/render/properties/output/emission on primary": false,
@@ -34,9 +34,9 @@
                     "set": {
                         "/nodes/guiding/properties/lc/LC min pdf": 10,
                         "/nodes/guiding/properties/mc/width confidence z": 0,
-                        "/nodes/quake/properties/lights/cell_grid/candidates": 1,
-                        "/nodes/quake/properties/lights/cell_grid/enable": true,
-                        "/nodes/quake/properties/lights/pool/candidates": 0,
+                        "/nodes/quake/properties/lights/cell draws": 1,
+                        "/nodes/quake/properties/lights/cells/enable": true,
+                        "/nodes/quake/properties/lights/scene draws": 0,
                         "/nodes/render/properties/max path length": 3,
                         "/nodes/render/properties/nee/mode": "mixture",
                         "/nodes/render/properties/output/emission on primary": false,
@@ -47,9 +47,9 @@
                 },
                 "pt_ssmm": {
                     "set": {
-                        "/nodes/quake/properties/lights/cell_grid/candidates": 1,
-                        "/nodes/quake/properties/lights/cell_grid/enable": true,
-                        "/nodes/quake/properties/lights/pool/candidates": 0,
+                        "/nodes/quake/properties/lights/cell draws": 1,
+                        "/nodes/quake/properties/lights/cells/enable": true,
+                        "/nodes/quake/properties/lights/scene draws": 0,
                         "/nodes/render/properties/max path length": 3,
                         "/nodes/render/properties/nee/mode": "mixture",
                         "/nodes/render/properties/output/emission on primary": false,
