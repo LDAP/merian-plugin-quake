@@ -49,6 +49,13 @@ struct QuakeMaterial : merian::Material {
         return payload.fullbright_tex != QUAKE_NO_TEXTURE ||
                payload.surface_flags == MAT_TYPE_WATERFALL;
     }
+
+    merian::TextureID get_emission_texture_id() const override {
+        const bool moves = (payload.surface_flags & MAT_TYPE_WARP) != 0u ||
+                           payload.surface_flags == MAT_TYPE_WATERFALL;
+        return payload.fullbright_tex != QUAKE_NO_TEXTURE && !moves ? payload.fullbright_tex
+                                                                    : merian::TextureID(-1);
+    }
 };
 
 // Resolved against the shader search path (the app adds res/).
