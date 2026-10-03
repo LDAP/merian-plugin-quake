@@ -42,6 +42,9 @@ extern static const bool quake_enable_transparency = false;
 static const float QUAKE_PANE_IOR = 1.5f;
 static const float QUAKE_LIQUID_IOR = 1.33f;
 
+static const float QUAKE_BASE_ROUGHNESS = 0.5f;
+static const float QUAKE_BASE_F0 = 0.2f;
+
 struct QuakeMaterial : MaterialModel {
     typealias MaterialSampleImpl = QuakeMaterialSample;
 
@@ -118,7 +121,7 @@ struct QuakeMaterial : MaterialModel {
         }
 
         // Albedo / Emission
-        float roughness = 0.6f;
+        float roughness = QUAKE_BASE_ROUGHNESS;
         float2 uv = sd.uv;
         if ((flags & MAT_TYPE_WARP) != 0u) {
             uv = quake_warp(uv, sd.time);
@@ -132,7 +135,7 @@ struct QuakeMaterial : MaterialModel {
         if (let albedo_tex_id = header.get_alpha_texture_id()) {
             albedo = lod.sample(tm.get_sampler2D(albedo_tex_id), uv).rgb;
             // desaturate for a better look
-            albedo = pow(albedo, 1. / 1.2);
+            albedo = pow(max(float3(0.0003), albedo), 1. / 1.2);
         }
 
         if (get_flags() == MAT_TYPE_WATERFALL) {
@@ -149,8 +152,11 @@ struct QuakeMaterial : MaterialModel {
         const float coverage = get_coverage(sd);
         out_emission *= coverage;
 
+        float f0 = QUAKE_BASE_F0;
         if (gloss_tex != TextureID(-1)) {
-            roughness = tm.get_sampler2D(gloss_tex).SampleLevel(uv, 0).r;
+            const float gloss = min(1.0, 1.5 * pow(tm.get_sampler2D(gloss_tex).SampleLevel(uv, 0).r, 1. / 4.));
+            f0 = lerp(QUAKE_BASE_F0, 1.0f, gloss);
+            roughness = lerp(QUAKE_BASE_ROUGHNESS, 0.3f, gloss);
         }
         const float alpha = ggx_roughness_to_alpha(roughness);
         const float pane_ior =
@@ -160,7 +166,7 @@ struct QuakeMaterial : MaterialModel {
         s.brdf =
             QuakeBSDF(pane,
                       QuakeSurfaceBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
-                                           GGXBRDF(alpha), LambertDiffuseBRDF(float3(1.0f)), 0.02f),
+                                           GGXBRDF(alpha), LambertDiffuseBRDF(float3(1.0f)), f0),
                                        albedo),
                       coverage);
         return s;
