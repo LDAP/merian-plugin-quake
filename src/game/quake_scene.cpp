@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <csignal>
 #include <cstdint>
 #include <cstring>
@@ -404,6 +405,7 @@ QuakeScene::QuakeScene(const merian::ShaderCompileContextHandle& compile_context
     tm->resize(MAX_GLTEXTURES + 2);
     quake_material_type_id = material_system->register_material_type(
         QUAKE_MATERIAL_SLANG_TYPE_NAME, QUAKE_MATERIAL_SLANG_MODULE_PATH);
+    update_transparency_constant();
     material_system->set_alpha_test_threshold(0.7F);
 
     auto cam =
@@ -748,7 +750,17 @@ void QuakeScene::update_camera() {
 
 namespace {
 
-QuakeMaterial make_brush_material(texture_t* tex, int surf_flags) {
+float brush_opacity(const entity_t* ent, const int surf_flags) {
+    if (ent != nullptr && ent->alpha != ENTALPHA_DEFAULT)
+        return ENTALPHA_DECODE(ent->alpha);
+    if ((surf_flags & SURF_DRAWSLIME) != 0)
+        return map_slimealpha > 0 ? map_slimealpha : map_wateralpha;
+    if ((surf_flags & SURF_DRAWWATER) != 0)
+        return map_wateralpha;
+    return 1.F;
+}
+
+QuakeMaterial make_brush_material(texture_t* tex, int surf_flags, const float opacity) {
     QuakeMaterial m;
     // Sky brushes carry no surface textures — shading goes through the scene env map.
     if ((surf_flags & MAT_TYPE_SKY) != 0) {
@@ -776,6 +788,7 @@ QuakeMaterial make_brush_material(texture_t* tex, int surf_flags) {
     const bool has_alpha =
         tex->gltexture != nullptr && (tex->gltexture->flags & TEXPREF_ALPHA) != 0u;
     m.payload.alpha_mode = has_alpha ? 0u : 15u;
+    m.payload.opacity = static_cast<uint8_t>(std::lround(std::clamp(opacity, 0.F, 1.F) * 255.F));
     // ad_tears emissive waterfalls
     if (tex->gltexture != nullptr && strstr(tex->gltexture->name, "wfall") != nullptr) {
         m.payload.surface_flags = MAT_TYPE_WATERFALL;
@@ -1028,10 +1041,12 @@ void QuakeScene::load_world_brushes() {
         if (bucket.indices.empty())
             continue;
 
-        const QuakeMaterial mat = make_brush_material(bucket.tex, bucket.surf_flags);
+        const QuakeMaterial mat = make_brush_material(bucket.tex, bucket.surf_flags,
+                                                      brush_opacity(nullptr, bucket.surf_flags));
         const merian::MaterialID material_id =
             material_system->add_material(quake_material_type_id, mat);
-        if (bucket.tex->anim_total > 0)
+        if (bucket.tex->anim_total > 0 ||
+            (bucket.surf_flags & (MAT_TYPE_WATER | MAT_TYPE_SLIME)) != 0)
             world_animated_materials.push_back({material_id, bucket.tex, bucket.surf_flags});
 
         auto mesh = std::make_unique<QuakeBrushMesh>();
@@ -1445,10 +1460,12 @@ void QuakeScene::update_brush_entity(entity_t* ent,
 
         const auto& material_system = get_material_system();
         for (const auto& part : geo_it->second) {
-            const QuakeMaterial mat = make_brush_material(part.tex, part.surf_flags);
+            const QuakeMaterial mat =
+                make_brush_material(part.tex, part.surf_flags, brush_opacity(ent, part.surf_flags));
             const merian::MaterialID material_id =
                 material_system->add_material(quake_material_type_id, mat);
-            if (part.tex->anim_total > 0)
+            if (part.tex->anim_total > 0 ||
+                (part.surf_flags & (MAT_TYPE_WATER | MAT_TYPE_SLIME)) != 0)
                 fresh.animated_materials.push_back({material_id, part.tex, part.surf_flags});
 
             auto mesh = std::make_unique<BrushEntityMesh>();
@@ -1468,12 +1485,24 @@ void QuakeScene::update_brush_entity(entity_t* ent,
             add_mesh_instance(mesh_id, node_id);
             fresh.mesh_ids.push_back(mesh_id);
         }
+        fresh.cached_alpha = ent->alpha;
 
         auto [it, _] = entity_slots.emplace(ent, std::move(fresh));
         slot = &it->second;
         current_entity_stats.brush.newly_created++;
     }
     current_entity_stats.brush.active++;
+
+    if (ent->alpha != slot->cached_alpha) {
+        const auto& parts = geo_it->second;
+        for (size_t i = 0; i < parts.size(); i++) {
+            get_material_system()->update_material(
+                get_mesh_infos()[slot->mesh_ids[i]].mesh->material_id,
+                make_brush_material(R_TextureAnimation(parts[i].tex, ent->frame),
+                                    parts[i].surf_flags, brush_opacity(ent, parts[i].surf_flags)));
+        }
+        slot->cached_alpha = ent->alpha;
+    }
 
     update_node(slot->node_id, entity_transform(ent));
 }
@@ -1589,23 +1618,32 @@ void QuakeScene::update_particles() {
     }
 }
 
+void QuakeScene::update_transparency_constant() {
+    get_material_system()->get_composition()->add_module_from_string(
+        "quake_material_constants",
+        fmt::format(
+            "namespace merian {{ export static const bool quake_enable_transparency = {}; }}",
+            enable_transparency ? "true" : "false"));
+}
+
 void QuakeScene::update_animated_materials() {
     const auto& material_system = get_material_system();
-    const auto resolve = [&](const AnimatedBrushMaterial& entry, int frame) {
+    const auto resolve = [&](const AnimatedBrushMaterial& entry, const entity_t* ent, int frame) {
         texture_t* current = R_TextureAnimation(entry.base_tex, frame);
-        const QuakeMaterial mat = make_brush_material(current, entry.surf_flags);
+        const QuakeMaterial mat =
+            make_brush_material(current, entry.surf_flags, brush_opacity(ent, entry.surf_flags));
         material_system->update_material(entry.material_id, mat);
     };
 
     for (const auto& entry : world_animated_materials)
-        resolve(entry, 0);
+        resolve(entry, nullptr, 0);
 
     // ent->frame picks the +0… vs +a… alt-anim set for togglable brush entities.
     for (auto& [ent, slot] : entity_slots) {
         if (slot.animated_materials.empty())
             continue;
         for (const auto& entry : slot.animated_materials)
-            resolve(entry, ent->frame);
+            resolve(entry, ent, ent->frame);
     }
 }
 
@@ -1627,6 +1665,11 @@ void QuakeScene::properties(merian::Properties& config) {
         "engine command line, e.g. '-game ad +skill 2 +map start'; whitespace separated, use "
         "double quotes for values with spaces, lines starting with # are ignored; applied at "
         "engine startup");
+
+    if (config.config_bool("enable transparency", enable_transparency,
+                           "Brush entities and liquids with an alpha let light through.")) {
+        update_transparency_constant();
+    }
 
     config.config_options("filtering", default_filtering, {"nearest", "linear"},
                           merian::Properties::OptionsStyle::COMBO,

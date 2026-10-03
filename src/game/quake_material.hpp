@@ -18,7 +18,7 @@ struct QuakeMaterialPayload {
     merian::TextureID gloss_tex{};
     uint16_t surface_flags{};
     uint8_t alpha_mode{};
-    uint8_t _pad{};
+    uint8_t opacity{255}; // unorm
 };
 static_assert(sizeof(QuakeMaterialPayload) == 10,
               "QuakeMaterialPayload layout must match Slang QuakeMaterial");

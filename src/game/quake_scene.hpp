@@ -131,6 +131,7 @@ class QuakeScene : public merian::Scene {
     void update_sprite_entity(entity_t* ent);
     void update_particles();
     void update_animated_materials();
+    void update_transparency_constant();
     void update_camera();
 
   private:
@@ -256,6 +257,7 @@ class QuakeScene : public merian::Scene {
 
         mspriteframe_t* cached_sprite_frame = nullptr;
 
+        uint8_t cached_alpha = ENTALPHA_DEFAULT;
         int cached_skinnum = -1;
         int cached_anim_frame = -1;
         int cached_pose1 = -1;
@@ -317,6 +319,7 @@ class QuakeScene : public merian::Scene {
     float fog_particle_size_um = 7.0F;
     float fog_density_factor = 0.5F;
     bool reproducible_renders = false;
+    bool enable_transparency = false;
 
     merian::Scene::CameraID quake_camera;
 

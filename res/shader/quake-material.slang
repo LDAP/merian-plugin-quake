@@ -5,6 +5,8 @@ import merian_shaders.shading.materials.material;
 import merian_shaders.shading.bsdfs.brdf_ggx;
 import merian_shaders.shading.bsdfs.brdf_lambert_diffuse;
 import merian_shaders.shading.bsdfs.bsdf_fresnel_mix;
+import merian_shaders.shading.bsdfs.bsdf_mix;
+import merian_shaders.shading.bsdfs.bsdf_thin_dielectric;
 import merian_shaders.shading.bsdfs.bsdf_tint;
 import merian_shaders.utils.normal_map;
 
@@ -30,7 +32,15 @@ float2 quake_waves(const float2 st, const float time) {
 }
 
 // albedo tints both lobes (matches the old bsdf_ggx_diffuse_mix; keeps demodulation exact)
-typealias QuakeBSDF = TintBSDF<FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>>;
+typealias QuakeSurfaceBSDF = TintBSDF<FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>>;
+
+// opacity is the coverage of the surface over a clear pane
+typealias QuakeBSDF = MixBSDF<ThinDielectricBSDF, QuakeSurfaceBSDF>;
+
+extern static const bool quake_enable_transparency = false;
+
+static const float QUAKE_PANE_IOR = 1.5f;
+static const float QUAKE_LIQUID_IOR = 1.33f;
 
 struct QuakeMaterial : MaterialModel {
     typealias MaterialSampleImpl = QuakeMaterialSample;
@@ -43,10 +53,22 @@ struct QuakeMaterial : MaterialModel {
     TextureID gloss_tex;
     uint16_t flags;     // MAT_TYPE_*
     uint8_t alpha_mode; // 0: use texture alpha; [1,15] map to [0,1] opaque
-    uint8_t _pad;
+    uint8_t opacity;    // unorm
 
     uint16_t get_flags() {
         return flags;
+    }
+
+    bool is_translucent() {
+        return quake_enable_transparency && opacity < 255;
+    }
+
+    // A translucent surface has no back face.
+    float get_coverage(const ShadingData sd) {
+        if (!is_translucent()) {
+            return 1.f;
+        }
+        return dot(sd.wi, sd.face_normal) < 0.f ? 0.f : float(opacity) / 255.f;
     }
 
     override float3 get_emission(const ShadingData sd,
@@ -60,14 +82,16 @@ struct QuakeMaterial : MaterialModel {
             }
         }
 
+        const float coverage = get_coverage(sd);
         if (get_flags() == MAT_TYPE_WATERFALL) {
             if (let albedo_tex_id = header.get_alpha_texture_id()) {
-                return pow(lod.sample(tm.get_sampler2D(albedo_tex_id), uv).rgb, 1. / 1.2);
+                return coverage *
+                       pow(lod.sample(tm.get_sampler2D(albedo_tex_id), uv).rgb, 1. / 1.2);
             }
-            return float3(1, 0, 1);
+            return coverage * float3(1, 0, 1);
         }
         if (fullbright_tex != TextureID(-1)) {
-            return ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
+            return coverage * ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
         }
         return float3(0);
     }
@@ -122,13 +146,23 @@ struct QuakeMaterial : MaterialModel {
             out_emission = float3(0);
         }
 
+        const float coverage = get_coverage(sd);
+        out_emission *= coverage;
+
         if (gloss_tex != TextureID(-1)) {
             roughness = tm.get_sampler2D(gloss_tex).SampleLevel(uv, 0).r;
         }
         const float alpha = ggx_roughness_to_alpha(roughness);
-        s.brdf = QuakeBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
-                               GGXBRDF(alpha), LambertDiffuseBRDF(float3(1.0f)), 0.02f),
-                           albedo);
+        const float pane_ior =
+            coverage > 0.f ? ((flags & MAT_TYPE_WARP) != 0u ? QUAKE_LIQUID_IOR : QUAKE_PANE_IOR)
+                           : 1.f;
+        const ThinDielectricBSDF pane = ThinDielectricBSDF(1.f / pane_ior, float3(1.0f));
+        s.brdf =
+            QuakeBSDF(pane,
+                      QuakeSurfaceBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
+                                           GGXBRDF(alpha), LambertDiffuseBRDF(float3(1.0f)), 0.02f),
+                                       albedo),
+                      coverage);
         return s;
     }
 }

@@ -43,7 +43,10 @@
         "quake": {
             "$+$outputs": [
                 "scene->dlss.scene"
-            ]
+            ],
+            "properties": {
+                "enable transparency": true
+            }
         },
         "render": {
             "$+$outputs": [
