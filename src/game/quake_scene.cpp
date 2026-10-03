@@ -750,17 +750,51 @@ void QuakeScene::update_camera() {
 
 namespace {
 
-float brush_opacity(const entity_t* ent, const int surf_flags) {
-    if (ent != nullptr && ent->alpha != ENTALPHA_DEFAULT)
-        return ENTALPHA_DECODE(ent->alpha);
-    if ((surf_flags & SURF_DRAWSLIME) != 0)
-        return map_slimealpha > 0 ? map_slimealpha : map_wateralpha;
-    if ((surf_flags & SURF_DRAWWATER) != 0)
-        return map_wateralpha;
-    return 1.F;
+constexpr float TRANSLUCENT_LIQUID_OPACITY_SCALE = 0.5F;
+constexpr float FOG_OPACITY_SCALE = 2.F;
+constexpr float WATERFALL_OPACITY_SCALE = 0.25F;
+
+bool is_waterfall(const texture_t* tex) {
+    return tex->gltexture != nullptr && strstr(tex->gltexture->name, "wfall") != nullptr;
 }
 
-QuakeMaterial make_brush_material(texture_t* tex, int surf_flags, const float opacity) {
+bool is_fog(const texture_t* tex) {
+    return tex->gltexture != nullptr && strstr(tex->gltexture->name, "fog") != nullptr;
+}
+
+bool is_glass(const texture_t* tex) {
+    if (tex->gltexture == nullptr)
+        return false;
+    const char* name = tex->gltexture->name;
+    return strstr(name, "glas") != nullptr || strstr(name, "gls") != nullptr ||
+           strstr(name, "window") != nullptr;
+}
+
+float brush_opacity(const entity_t* ent, const texture_t* tex, const int surf_flags) {
+    const bool liquid = (surf_flags & (SURF_DRAWWATER | SURF_DRAWSLIME)) != 0 || is_waterfall(tex);
+    float opacity = 1.F;
+    if (ent != nullptr && ent->alpha != ENTALPHA_DEFAULT)
+        opacity = ENTALPHA_DECODE(ent->alpha);
+    else if ((surf_flags & SURF_DRAWSLIME) != 0)
+        opacity = map_slimealpha > 0 ? map_slimealpha : map_wateralpha;
+    else if (liquid)
+        opacity = map_wateralpha;
+    if (opacity >= 1.F)
+        return opacity;
+    if (is_fog(tex))
+        return std::min(opacity * FOG_OPACITY_SCALE, 1.F);
+    if (is_waterfall(tex))
+        return opacity * TRANSLUCENT_LIQUID_OPACITY_SCALE * WATERFALL_OPACITY_SCALE;
+    return liquid ? opacity * TRANSLUCENT_LIQUID_OPACITY_SCALE : opacity;
+}
+
+uint8_t brush_pane(const texture_t* tex, const int surf_flags) {
+    if ((surf_flags & MAT_TYPE_WARP) != 0)
+        return is_waterfall(tex) || is_fog(tex) ? PANE_NONE : PANE_LIQUID;
+    return is_glass(tex) ? PANE_GLASS : PANE_NONE;
+}
+
+QuakeMaterial make_brush_material(texture_t* tex, int surf_flags, const entity_t* ent) {
     QuakeMaterial m;
     // Sky brushes carry no surface textures — shading goes through the scene env map.
     if ((surf_flags & MAT_TYPE_SKY) != 0) {
@@ -769,7 +803,6 @@ QuakeMaterial make_brush_material(texture_t* tex, int surf_flags, const float op
         m.payload.normal_tex = QUAKE_NO_TEXTURE;
         m.payload.gloss_tex = QUAKE_NO_TEXTURE;
         m.payload.surface_flags = static_cast<uint16_t>(surf_flags);
-        m.payload.alpha_mode = 15u;
         return m;
     }
 
@@ -785,12 +818,11 @@ QuakeMaterial make_brush_material(texture_t* tex, int surf_flags, const float op
                                                 : QUAKE_NO_TEXTURE;
     // MAT_TYPE_* alias SURF_DRAW* bits; callers pre-mask with SURF_INTERESTING_BITS.
     m.payload.surface_flags = static_cast<uint16_t>(surf_flags);
-    const bool has_alpha =
-        tex->gltexture != nullptr && (tex->gltexture->flags & TEXPREF_ALPHA) != 0u;
-    m.payload.alpha_mode = has_alpha ? 0u : 15u;
-    m.payload.opacity = static_cast<uint8_t>(std::lround(std::clamp(opacity, 0.F, 1.F) * 255.F));
+    m.payload.pane = brush_pane(tex, surf_flags);
+    m.payload.opacity = static_cast<uint8_t>(
+        std::lround(std::clamp(brush_opacity(ent, tex, surf_flags), 0.F, 1.F) * 255.F));
     // ad_tears emissive waterfalls
-    if (tex->gltexture != nullptr && strstr(tex->gltexture->name, "wfall") != nullptr) {
+    if (is_waterfall(tex)) {
         m.payload.surface_flags = MAT_TYPE_WATERFALL;
     }
 
@@ -817,7 +849,6 @@ QuakeMaterial make_alias_material(aliashdr_t* hdr, int skin, int fm = 0) {
     if (hdr->gstextures[skin][fm] != nullptr)
         m.payload.gloss_tex = static_cast<merian::TextureID>(hdr->gstextures[skin][fm]->texnum);
     m.payload.surface_flags = MAT_TYPE_NONE;
-    m.payload.alpha_mode = 15;
     return m;
 }
 
@@ -826,7 +857,6 @@ QuakeMaterial make_sprite_frame_material(mspriteframe_t* frame) {
     if (frame->gltexture != nullptr)
         m.header.alpha_texture_id = static_cast<merian::TextureID>(frame->gltexture->texnum);
     m.payload.surface_flags = MAT_TYPE_NONE;
-    m.payload.alpha_mode = 0;
     m.payload.fullbright_tex = m.header.alpha_texture_id;
     return m;
 }
@@ -1041,8 +1071,7 @@ void QuakeScene::load_world_brushes() {
         if (bucket.indices.empty())
             continue;
 
-        const QuakeMaterial mat = make_brush_material(bucket.tex, bucket.surf_flags,
-                                                      brush_opacity(nullptr, bucket.surf_flags));
+        const QuakeMaterial mat = make_brush_material(bucket.tex, bucket.surf_flags, nullptr);
         const merian::MaterialID material_id =
             material_system->add_material(quake_material_type_id, mat);
         if (bucket.tex->anim_total > 0 ||
@@ -1238,7 +1267,6 @@ void QuakeScene::init_particle_batch() {
     particle_mat.header.alpha_texture_id = static_cast<merian::TextureID>(MAX_GLTEXTURES);
     particle_mat.payload.fullbright_tex = static_cast<merian::TextureID>(MAX_GLTEXTURES + 1);
     particle_mat.payload.surface_flags = MAT_TYPE_NONE;
-    particle_mat.payload.alpha_mode = 15;
     particle_material_id =
         get_material_system()->add_material(quake_material_type_id, particle_mat);
 
@@ -1460,8 +1488,7 @@ void QuakeScene::update_brush_entity(entity_t* ent,
 
         const auto& material_system = get_material_system();
         for (const auto& part : geo_it->second) {
-            const QuakeMaterial mat =
-                make_brush_material(part.tex, part.surf_flags, brush_opacity(ent, part.surf_flags));
+            const QuakeMaterial mat = make_brush_material(part.tex, part.surf_flags, ent);
             const merian::MaterialID material_id =
                 material_system->add_material(quake_material_type_id, mat);
             if (part.tex->anim_total > 0 ||
@@ -1499,7 +1526,7 @@ void QuakeScene::update_brush_entity(entity_t* ent,
             get_material_system()->update_material(
                 get_mesh_infos()[slot->mesh_ids[i]].mesh->material_id,
                 make_brush_material(R_TextureAnimation(parts[i].tex, ent->frame),
-                                    parts[i].surf_flags, brush_opacity(ent, parts[i].surf_flags)));
+                                    parts[i].surf_flags, ent));
         }
         slot->cached_alpha = ent->alpha;
     }
@@ -1630,8 +1657,7 @@ void QuakeScene::update_animated_materials() {
     const auto& material_system = get_material_system();
     const auto resolve = [&](const AnimatedBrushMaterial& entry, const entity_t* ent, int frame) {
         texture_t* current = R_TextureAnimation(entry.base_tex, frame);
-        const QuakeMaterial mat =
-            make_brush_material(current, entry.surf_flags, brush_opacity(ent, entry.surf_flags));
+        const QuakeMaterial mat = make_brush_material(current, entry.surf_flags, ent);
         material_system->update_material(entry.material_id, mat);
     };
 

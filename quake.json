@@ -16,6 +16,7 @@
             }
         },
         "renderer": {
+            "default": "pt_mcpg",
             "variants": {
                 "pt": {
                     "set": {
@@ -227,7 +228,9 @@
                 },
                 "startup commands": "",
                 "stop after worldspawn": -1,
-                "volume max t": 1000.0
+                "fog density factor": 1.7,
+                "fog particle size": 2.7,
+                "volume max t": 200.0
             },
             "type": "Quake"
         },

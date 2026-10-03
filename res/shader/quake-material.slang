@@ -34,13 +34,13 @@ float2 quake_waves(const float2 st, const float time) {
 // albedo tints both lobes (matches the old bsdf_ggx_diffuse_mix; keeps demodulation exact)
 typealias QuakeSurfaceBSDF = TintBSDF<FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>>;
 
-// opacity is the coverage of the surface over a clear pane
 typealias QuakeBSDF = MixBSDF<ThinDielectricBSDF, QuakeSurfaceBSDF>;
 
 extern static const bool quake_enable_transparency = false;
 
-static const float QUAKE_PANE_IOR = 1.5f;
+static const float QUAKE_GLASS_IOR = 1.5f;
 static const float QUAKE_LIQUID_IOR = 1.33f;
+static const float QUAKE_WATERFALL_EMISSION_GAIN = 4.f;
 
 static const float QUAKE_BASE_ROUGHNESS = 0.5f;
 static const float QUAKE_BASE_F0 = 0.2f;
@@ -54,9 +54,9 @@ struct QuakeMaterial : MaterialModel {
     TextureID fullbright_tex;
     TextureID normal_tex;
     TextureID gloss_tex;
-    uint16_t flags;     // MAT_TYPE_*
-    uint8_t alpha_mode; // 0: use texture alpha; [1,15] map to [0,1] opaque
-    uint8_t opacity;    // unorm
+    uint16_t flags; // MAT_TYPE_*
+    uint8_t pane;
+    uint8_t opacity;
 
     uint16_t get_flags() {
         return flags;
@@ -66,12 +66,29 @@ struct QuakeMaterial : MaterialModel {
         return quake_enable_transparency && opacity < 255;
     }
 
-    // A translucent surface has no back face.
+    float get_pane_ior() {
+        switch (pane) {
+        case PANE_GLASS:
+            return QUAKE_GLASS_IOR;
+        case PANE_LIQUID:
+            return QUAKE_LIQUID_IOR;
+        default:
+            return 1.f;
+        }
+    }
+
     float get_coverage(const ShadingData sd) {
         if (!is_translucent()) {
             return 1.f;
         }
         return dot(sd.wi, sd.face_normal) < 0.f ? 0.f : float(opacity) / 255.f;
+    }
+
+    float get_emission_scale(const ShadingData sd) {
+        const float coverage = get_coverage(sd);
+        return get_flags() == MAT_TYPE_WATERFALL
+                   ? min(1.f, coverage * QUAKE_WATERFALL_EMISSION_GAIN)
+                   : coverage;
     }
 
     override float3 get_emission(const ShadingData sd,
@@ -85,16 +102,17 @@ struct QuakeMaterial : MaterialModel {
             }
         }
 
-        const float coverage = get_coverage(sd);
+        const float emission_scale = get_emission_scale(sd);
         if (get_flags() == MAT_TYPE_WATERFALL) {
             if (let albedo_tex_id = header.get_alpha_texture_id()) {
-                return coverage *
+                return emission_scale *
                        pow(lod.sample(tm.get_sampler2D(albedo_tex_id), uv).rgb, 1. / 1.2);
             }
-            return coverage * float3(1, 0, 1);
+            return emission_scale * float3(1, 0, 1);
         }
         if (fullbright_tex != TextureID(-1)) {
-            return coverage * ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
+            return emission_scale *
+                   ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
         }
         return float3(0);
     }
@@ -150,21 +168,20 @@ struct QuakeMaterial : MaterialModel {
         }
 
         const float coverage = get_coverage(sd);
-        out_emission *= coverage;
+        out_emission *= get_emission_scale(sd);
 
         float f0 = QUAKE_BASE_F0;
         if (gloss_tex != TextureID(-1)) {
-            const float gloss = min(1.0, 1.5 * pow(tm.get_sampler2D(gloss_tex).SampleLevel(uv, 0).r, 1. / 4.));
+            const float gloss =
+                min(1.0, 1.5 * pow(tm.get_sampler2D(gloss_tex).SampleLevel(uv, 0).r, 1. / 4.));
             f0 = lerp(QUAKE_BASE_F0, 1.0f, gloss);
             roughness = lerp(QUAKE_BASE_ROUGHNESS, 0.3f, gloss);
         }
         const float alpha = ggx_roughness_to_alpha(roughness);
-        const float pane_ior =
-            coverage > 0.f ? ((flags & MAT_TYPE_WARP) != 0u ? QUAKE_LIQUID_IOR : QUAKE_PANE_IOR)
-                           : 1.f;
-        const ThinDielectricBSDF pane = ThinDielectricBSDF(1.f / pane_ior, float3(1.0f));
+        const float pane_ior = coverage > 0.f ? get_pane_ior() : 1.f;
+        const ThinDielectricBSDF clear_pane = ThinDielectricBSDF(1.f / pane_ior, float3(1.0f));
         s.brdf =
-            QuakeBSDF(pane,
+            QuakeBSDF(clear_pane,
                       QuakeSurfaceBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
                                            GGXBRDF(alpha), LambertDiffuseBRDF(float3(1.0f)), f0),
                                        albedo),

@@ -13,6 +13,31 @@
                     ]
                 }
             }
+        },
+        "quality": {
+            "default": "default",
+            "type": "variant",
+            "variants": {
+                "default": {},
+                "fast": {
+                    "set": {
+                        "/nodes/gbuffer/properties/resolution scale": "3/4"
+                    }
+                },
+                "quality": {
+                    "set": {
+                        "/nodes/render/properties/surface/nee": "resampled (RIS)"
+                    }
+                },
+                "ultra_fast": {
+                    "set": {
+                        "/nodes/gbuffer/properties/resolution scale": "1/2",
+                        "/nodes/render/properties/surface/cache tail": true,
+                        "/nodes/render/properties/surface/max diffuse bounces": 1,
+                        "/nodes/render/properties/surface/samples per pixel": 1
+                    }
+                }
+            }
         }
     },
     "nodes": {
@@ -37,6 +62,8 @@
                 "gbuffer->dlss.gbuffer"
             ],
             "properties": {
+                "max roughness": 0.4,
+                "primary surface replacement": true,
                 "texture lod bias": -1.0
             }
         },
