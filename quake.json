@@ -22,12 +22,14 @@
                         "/nodes/quake/properties/lights/cell draws": 1,
                         "/nodes/quake/properties/lights/cells/enable": true,
                         "/nodes/quake/properties/lights/scene draws": 0,
-                        "/nodes/render/properties/max path length": 3,
-                        "/nodes/render/properties/nee/mode": "mixture",
                         "/nodes/render/properties/output/emission on primary": false,
-                        "/nodes/render/properties/shares/bsdf": 0.1,
-                        "/nodes/render/properties/shares/guiding": 0.8,
-                        "/nodes/render/properties/shares/nee": 0.1
+                        "/nodes/render/properties/surface/max path length": 3,
+                        "/nodes/render/properties/surface/nee": "mixture (MIS)",
+                        "/nodes/render/properties/surface/shares/bsdf": 0.1,
+                        "/nodes/render/properties/surface/shares/guiding": 0.8,
+                        "/nodes/render/properties/surface/shares/nee": 0.1,
+                        "/nodes/render/properties/volume/shares/guiding": 0.8,
+                        "/nodes/render/properties/volume/shares/phase": 0.1
                     }
                 },
                 "pt_mcpg": {
@@ -37,12 +39,14 @@
                         "/nodes/quake/properties/lights/cell draws": 1,
                         "/nodes/quake/properties/lights/cells/enable": true,
                         "/nodes/quake/properties/lights/scene draws": 0,
-                        "/nodes/render/properties/max path length": 3,
-                        "/nodes/render/properties/nee/mode": "mixture",
                         "/nodes/render/properties/output/emission on primary": false,
-                        "/nodes/render/properties/shares/bsdf": 0.1,
-                        "/nodes/render/properties/shares/guiding": 0.8,
-                        "/nodes/render/properties/shares/nee": 0.1
+                        "/nodes/render/properties/surface/max path length": 3,
+                        "/nodes/render/properties/surface/nee": "mixture (MIS)",
+                        "/nodes/render/properties/surface/shares/bsdf": 0.1,
+                        "/nodes/render/properties/surface/shares/guiding": 0.8,
+                        "/nodes/render/properties/surface/shares/nee": 0.1,
+                        "/nodes/render/properties/volume/shares/guiding": 0.8,
+                        "/nodes/render/properties/volume/shares/phase": 0.1
                     }
                 },
                 "pt_ssmm": {
@@ -50,12 +54,14 @@
                         "/nodes/quake/properties/lights/cell draws": 1,
                         "/nodes/quake/properties/lights/cells/enable": true,
                         "/nodes/quake/properties/lights/scene draws": 0,
-                        "/nodes/render/properties/max path length": 3,
-                        "/nodes/render/properties/nee/mode": "mixture",
                         "/nodes/render/properties/output/emission on primary": false,
-                        "/nodes/render/properties/shares/bsdf": 0.1,
-                        "/nodes/render/properties/shares/guiding": 0.8,
-                        "/nodes/render/properties/shares/nee": 0.1
+                        "/nodes/render/properties/surface/max path length": 3,
+                        "/nodes/render/properties/surface/nee": "mixture (MIS)",
+                        "/nodes/render/properties/surface/shares/bsdf": 0.1,
+                        "/nodes/render/properties/surface/shares/guiding": 0.8,
+                        "/nodes/render/properties/surface/shares/nee": 0.1,
+                        "/nodes/render/properties/volume/shares/guiding": 0.8,
+                        "/nodes/render/properties/volume/shares/phase": 0.1
                     }
                 },
                 "restir_di": {
