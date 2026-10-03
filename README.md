@@ -1,7 +1,6 @@
 # merian-plugin-quake
 
-Quake as a [merian](https://github.com/LDAP/merian) scene: [Quakespasm](https://github.com/LDAP/quakespasm)
-runs the game, merian path traces it.
+A path tracer for Quake bridging [Quakespasm](https://github.com/LDAP/quakespasm) to [merian](https://github.com/LDAP/merian).
 
 <p align="center">
   <img src="images/demo.avif" width="960" />
