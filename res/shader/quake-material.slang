@@ -172,8 +172,7 @@ struct QuakeMaterial : MaterialModel {
 
         float f0 = QUAKE_BASE_F0;
         if (gloss_tex != TextureID(-1)) {
-            const float gloss =
-                min(1.0, 1.5 * pow(tm.get_sampler2D(gloss_tex).SampleLevel(uv, 0).r, 1. / 4.));
+            const float gloss = tm.get_sampler2D(gloss_tex).SampleLevel(uv, 0).r;
             f0 = lerp(QUAKE_BASE_F0, 1.0f, gloss);
             roughness = lerp(QUAKE_BASE_ROUGHNESS, 0.3f, gloss);
         }
