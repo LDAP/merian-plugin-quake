@@ -3,7 +3,7 @@
 
 import merian_shaders.shading.materials.material;
 import merian_shaders.shading.bsdfs.brdf_ggx;
-import merian_shaders.shading.bsdfs.brdf_lambert_diffuse;
+import merian_shaders.shading.bsdfs.bsdf_diffuse_transmission;
 import merian_shaders.shading.bsdfs.bsdf_fresnel_mix;
 import merian_shaders.shading.bsdfs.bsdf_mix;
 import merian_shaders.shading.bsdfs.bsdf_thin_dielectric;
@@ -32,7 +32,7 @@ float2 quake_waves(const float2 st, const float time) {
 }
 
 // albedo tints both lobes (matches the old bsdf_ggx_diffuse_mix; keeps demodulation exact)
-typealias QuakeSurfaceBSDF = TintBSDF<FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>>;
+typealias QuakeSurfaceBSDF = TintBSDF<FresnelMixBSDF<GGXBRDF, DiffuseTransmissionBSDF>>;
 
 typealias QuakeBSDF = MixBSDF<ThinDielectricBSDF, QuakeSurfaceBSDF>;
 
@@ -179,10 +179,14 @@ struct QuakeMaterial : MaterialModel {
         const float alpha = ggx_roughness_to_alpha(roughness);
         const float pane_ior = coverage > 0.f ? get_pane_ior() : 1.f;
         const ThinDielectricBSDF clear_pane = ThinDielectricBSDF(1.f / pane_ior, float3(1.0f));
+        const float3 transmittance = pane == PANE_LIQUID && is_translucent()
+                                         ? saturate((1.f - albedo) / max(albedo, 1e-4f))
+                                         : float3(0.f);
         s.brdf =
             QuakeBSDF(clear_pane,
-                      QuakeSurfaceBSDF(FresnelMixBSDF<GGXBRDF, LambertDiffuseBRDF>(
-                                           GGXBRDF(alpha), LambertDiffuseBRDF(float3(1.0f)), f0),
+                      QuakeSurfaceBSDF(FresnelMixBSDF<GGXBRDF, DiffuseTransmissionBSDF>(
+                                           GGXBRDF(alpha),
+                                           DiffuseTransmissionBSDF(float3(1.f), transmittance), f0),
                                        albedo),
                       coverage);
         return s;

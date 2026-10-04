@@ -1014,19 +1014,47 @@ std::unordered_map<QuakeScene::TexFlagsKey,
                    QuakeScene::BrushSurfaceBucket,
                    QuakeScene::TexFlagsKeyHash>
 QuakeScene::collect_brush_surfaces(qmodel_t* mod) {
+    const auto drawn = [&](const msurface_t* surf) {
+        return surf->texinfo != nullptr && surf->texinfo->texture != nullptr &&
+               strcmp(surf->texinfo->texture->name, "skip") != 0;
+    };
+
+    enum class Sides : uint8_t { ONE, TWO, MERGED };
+    std::vector<Sides> sides(mod->nummodelsurfaces, Sides::ONE);
+    std::unordered_map<FaceKey, int, FaceKeyHash> faces;
+    for (int i = 0; i < mod->nummodelsurfaces; i++) {
+        const msurface_t* surf = &mod->surfaces[mod->firstmodelsurface + i];
+        if (!drawn(surf))
+            continue;
+        FaceKey face{surf->plane, {}};
+        face.vertices.reserve(surf->numedges);
+        for (int e = 0; e < surf->numedges; e++) {
+            const int edge = mod->surfedges[surf->firstedge + e];
+            face.vertices.push_back(edge >= 0 ? mod->edges[edge].v[0] : mod->edges[-edge].v[1]);
+        }
+        std::ranges::sort(face.vertices);
+        const auto [it, inserted] = faces.try_emplace(std::move(face), i);
+        if (inserted || sides[it->second] != Sides::ONE)
+            continue;
+        const msurface_t* other = &mod->surfaces[mod->firstmodelsurface + it->second];
+        if (((surf->flags ^ other->flags) & SURF_PLANEBACK) != 0) {
+            sides[it->second] = Sides::TWO;
+            sides[i] = Sides::MERGED;
+        }
+    }
+
     std::unordered_map<TexFlagsKey, BrushSurfaceBucket, TexFlagsKeyHash> buckets;
     for (int i = 0; i < mod->nummodelsurfaces; i++) {
         msurface_t* surf = &mod->surfaces[mod->firstmodelsurface + i];
-        if (surf->texinfo == nullptr || surf->texinfo->texture == nullptr)
+        if (!drawn(surf) || sides[i] == Sides::MERGED)
             continue;
         texture_t* tex = surf->texinfo->texture;
-        if (strcmp(tex->name, "skip") == 0)
-            continue;
 
-        const TexFlagsKey key{tex, surf->flags & SURF_INTERESTING_BITS};
+        const TexFlagsKey key{tex, surf->flags & SURF_INTERESTING_BITS, sides[i] == Sides::TWO};
         auto& bucket = buckets[key];
         bucket.tex = tex;
         bucket.surf_flags = key.surf_flags;
+        bucket.two_sided = key.two_sided;
 
         merian::float3 plane_n = merian::as_float3(surf->plane->normal);
         if ((surf->flags & SURF_PLANEBACK) != 0)
@@ -1087,6 +1115,9 @@ void QuakeScene::load_world_brushes() {
         mesh->flags = merian::Scene::MeshFlags::FlipFacing;
         if (!has_alpha) {
             mesh->flags = mesh->flags | merian::Scene::MeshFlags::IsOpaque;
+        }
+        if (bucket.two_sided) {
+            mesh->flags = mesh->flags | merian::Scene::MeshFlags::TwoSided;
         }
         if ((bucket.surf_flags & MAT_TYPE_SKY) != 0) {
             mesh->flags = mesh->flags | merian::Scene::MeshFlags::UseEnvMap;
@@ -1468,7 +1499,7 @@ void QuakeScene::update_brush_entity(entity_t* ent,
             parts.push_back({std::move(vb), std::move(ib),
                              static_cast<uint32_t>(bucket.vertices.size()),
                              static_cast<uint32_t>(bucket.indices.size()), bucket.tex,
-                             bucket.surf_flags, has_alpha});
+                             bucket.surf_flags, has_alpha, bucket.two_sided});
         }
         geo_it = brush_submodel_geo.find(ent->model);
     }
@@ -1501,6 +1532,8 @@ void QuakeScene::update_brush_entity(entity_t* ent,
             mesh->flags = merian::Scene::MeshFlags::FlipFacing;
             if (!part.has_alpha)
                 mesh->flags = mesh->flags | merian::Scene::MeshFlags::IsOpaque;
+            if (part.two_sided)
+                mesh->flags = mesh->flags | merian::Scene::MeshFlags::TwoSided;
             if ((part.surf_flags & MAT_TYPE_SKY) != 0)
                 mesh->flags = mesh->flags | merian::Scene::MeshFlags::UseEnvMap;
             mesh->instance_mask = instance_mask;

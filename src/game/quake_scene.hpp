@@ -164,18 +164,22 @@ class QuakeScene : public merian::Scene {
     struct TexFlagsKey {
         texture_t* tex;
         int surf_flags;
+        bool two_sided;
         bool operator==(const TexFlagsKey& o) const noexcept {
-            return tex == o.tex && surf_flags == o.surf_flags;
+            return tex == o.tex && surf_flags == o.surf_flags && two_sided == o.two_sided;
         }
         bool operator<(const TexFlagsKey& o) const noexcept {
             if (tex != o.tex)
                 return tex < o.tex;
-            return surf_flags < o.surf_flags;
+            if (surf_flags != o.surf_flags)
+                return surf_flags < o.surf_flags;
+            return two_sided < o.two_sided;
         }
     };
     struct TexFlagsKeyHash {
         size_t operator()(const TexFlagsKey& k) const noexcept {
-            return std::hash<texture_t*>()(k.tex) ^ (std::hash<int>()(k.surf_flags) << 1u);
+            return std::hash<texture_t*>()(k.tex) ^ (std::hash<int>()(k.surf_flags) << 1u) ^
+                   (std::hash<bool>()(k.two_sided) << 2u);
         }
     };
     // SURF_PLANEBACK is per-vertex, SURF_DRAWTILED selects r_notexture; the
@@ -183,12 +187,27 @@ class QuakeScene : public merian::Scene {
     static constexpr int SURF_INTERESTING_BITS =
         SURF_DRAWSKY | SURF_DRAWLAVA | SURF_DRAWSLIME | SURF_DRAWTELE | SURF_DRAWWATER;
 
+    struct FaceKey {
+        const mplane_t* plane;
+        std::vector<unsigned int> vertices;
+        bool operator==(const FaceKey& o) const = default;
+    };
+    struct FaceKeyHash {
+        size_t operator()(const FaceKey& k) const noexcept {
+            size_t h = std::hash<const mplane_t*>()(k.plane);
+            for (const unsigned int v : k.vertices)
+                h = h * 31u + v;
+            return h;
+        }
+    };
+
     // Pre-upload CPU buffer for one (texture, surf_flags) partition.
     struct BrushSurfaceBucket {
         std::vector<merian::PackedVertexData> vertices;
         std::vector<merian::uint3> indices;
         texture_t* tex = nullptr;
         int surf_flags = 0;
+        bool two_sided = false;
     };
     std::unordered_map<TexFlagsKey, BrushSurfaceBucket, TexFlagsKeyHash>
     collect_brush_surfaces(qmodel_t* mod);
@@ -221,6 +240,7 @@ class QuakeScene : public merian::Scene {
         texture_t* tex;
         int surf_flags;
         bool has_alpha;
+        bool two_sided;
     };
     std::unordered_map<qmodel_t*, std::vector<BrushSubmodelGeoPart>> brush_submodel_geo;
 
