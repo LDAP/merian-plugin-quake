@@ -26,7 +26,7 @@
                 },
                 "quality": {
                     "set": {
-                        "/nodes/render/properties/surface/nee": "resampled (RIS)"
+                        "/nodes/render/properties/surface/nee sampling": "resampled (RIS)"
                     }
                 },
                 "ultra_fast": {
