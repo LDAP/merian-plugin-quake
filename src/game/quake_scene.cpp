@@ -279,14 +279,14 @@ extern "C" qboolean SNDDMA_Init(dma_t* dma) {
         return false;
 
     const auto callback = [](uint8_t* stream, int len) {
-        int buffersize = shm->samples * (shm->samplebits / 8);
-        int pos, tobufend;
-        int len1, len2;
-
         if (!shm) {
             memset(stream, 0, len);
             return;
         }
+        int buffersize = shm->samples * (shm->samplebits / 8);
+        int pos, tobufend;
+        int len1, len2;
+
         pos = (shm->samplepos * (shm->samplebits / 8));
         if (pos >= buffersize)
             shm->samplepos = pos = 0;
@@ -360,6 +360,9 @@ extern "C" int SNDDMA_GetDMAPos(void) {
 }
 
 extern "C" void SNDDMA_Shutdown(void) {
+    // the callback reads the buffer until the device is closed
+    if (g_quake_data.audio_device)
+        g_quake_data.audio_device->close_device();
     if (shm != nullptr) {
         if (shm->buffer != nullptr)
             free(shm->buffer);
