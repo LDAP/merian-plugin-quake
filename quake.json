@@ -20,9 +20,6 @@
             "variants": {
                 "pt": {
                     "set": {
-                        "/nodes/quake/properties/lights/cell draws": 1,
-                        "/nodes/quake/properties/lights/cells/enable": true,
-                        "/nodes/quake/properties/lights/scene draws": 0,
                         "/nodes/render/properties/output/emission on primary": false,
                         "/nodes/render/properties/surface/max diffuse bounces": 2,
                         "/nodes/render/properties/surface/max glossy bounces": 2,
@@ -40,9 +37,6 @@
                     "set": {
                         "/nodes/guiding/properties/lc/LC min pdf": 10,
                         "/nodes/guiding/properties/mc/width confidence z": 0,
-                        "/nodes/quake/properties/lights/cell draws": 1,
-                        "/nodes/quake/properties/lights/cells/enable": true,
-                        "/nodes/quake/properties/lights/scene draws": 0,
                         "/nodes/render/properties/output/emission on primary": false,
                         "/nodes/render/properties/surface/max diffuse bounces": 2,
                         "/nodes/render/properties/surface/max glossy bounces": 2,
@@ -58,9 +52,6 @@
                 },
                 "pt_ssmm": {
                     "set": {
-                        "/nodes/quake/properties/lights/cell draws": 1,
-                        "/nodes/quake/properties/lights/cells/enable": true,
-                        "/nodes/quake/properties/lights/scene draws": 0,
                         "/nodes/render/properties/output/emission on primary": false,
                         "/nodes/render/properties/surface/max diffuse bounces": 2,
                         "/nodes/render/properties/surface/max glossy bounces": 2,
