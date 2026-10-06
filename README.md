@@ -14,7 +14,7 @@ A path tracer for Quake bridging [Quakespasm](https://github.com/LDAP/quakespasm
   <img src="images/ad_grendel.jpg" width="24%" />
 </p>
 
-Credits: start from Alkaline; ad_tears, start, ad_sepulcher, ad_azad, ad_grendel from Arcane Dimensions; start from The Immortal Lock.
+Credits: start from Alkaline; ad_tears, start, ad_sepulcher, ad_azad, ad_grendel from Arcane Dimensions; start from The Immortal Lock; start from Quake Brutalist Jam III.
 
 Note: Proper volume handling and transparency needs `--denoiser dlss` and a NVIDIA GPU currently.
 
