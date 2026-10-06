@@ -8,6 +8,8 @@
 
 namespace merian_quake {
 
+constexpr uint16_t HALF_ONE = 0x3C00;
+
 // Mirrors the trailing fields of merian::QuakeMaterial in
 // res/shader/quake-material.slang — order, sizes and packing must stay in sync.
 // surface_flags carries MAT_TYPE_* (res/shader/quake-material.slangh); brush variants
@@ -19,8 +21,9 @@ struct QuakeMaterialPayload {
     uint16_t surface_flags{};
     uint8_t pane{PANE_NONE};
     uint8_t opacity{255}; // unorm
+    uint16_t emission_scale = HALF_ONE;
 };
-static_assert(sizeof(QuakeMaterialPayload) == 10,
+static_assert(sizeof(QuakeMaterialPayload) == 12,
               "QuakeMaterialPayload layout must match Slang QuakeMaterial");
 
 // kQuakeNoTexture on the Slang side.
@@ -53,8 +56,10 @@ struct QuakeMaterial : merian::Material {
     merian::TextureID get_emission_texture_id() const override {
         const bool moves = (payload.surface_flags & MAT_TYPE_WARP) != 0u ||
                            payload.surface_flags == MAT_TYPE_WATERFALL;
-        return payload.fullbright_tex != QUAKE_NO_TEXTURE && !moves ? payload.fullbright_tex
-                                                                    : merian::TextureID(-1);
+        const bool directional = payload.surface_flags == MAT_TYPE_LIGHT_ENTITY;
+        return payload.fullbright_tex != QUAKE_NO_TEXTURE && !moves && !directional
+                   ? payload.fullbright_tex
+                   : merian::TextureID(-1);
     }
 };
 

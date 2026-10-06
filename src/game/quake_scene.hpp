@@ -1,6 +1,7 @@
 #pragma once
 
 #include "game/quake_draw.hpp"
+#include "game/quake_lights.hpp"
 #include "game/quake_material.hpp"
 
 #include "merian-shaders/scene/scene.hpp"
@@ -27,6 +28,11 @@ namespace merian_quake {
 
 // Texture-manager capacity; must match MAX_GLTEXTURES in quakespasm's gl_texmgr.c.
 constexpr uint32_t MAX_GLTEXTURES = 4096;
+constexpr auto PALETTE_TEXTURE = static_cast<merian::TextureID>(MAX_GLTEXTURES);
+constexpr auto FULLBRIGHT_PALETTE_TEXTURE = static_cast<merian::TextureID>(MAX_GLTEXTURES + 1);
+constexpr auto LIGHT_ENTITY_RADIANCE_TEXTURE = static_cast<merian::TextureID>(MAX_GLTEXTURES + 2);
+constexpr auto LIGHT_ENTITY_SPOT_TEXTURE = static_cast<merian::TextureID>(MAX_GLTEXTURES + 3);
+constexpr uint32_t TEXTURE_CAPACITY = MAX_GLTEXTURES + 4;
 
 // One bit per geometry class, written into Mesh::instance_mask. Lets render
 // passes include/exclude classes by ANDing with the TLAS trace mask.
@@ -38,6 +44,7 @@ enum class InstanceMask : uint8_t {
     PARTICLE = 1u << 4,     // particles
     VIEWENT = 1u << 5,      // first-person gun (cl.viewent)
     PLAYER_BODY = 1u << 6,  // local player's third-person body
+    LIGHT_ENTITY = 1u << 7,
 };
 
 constexpr uint8_t to_mask(InstanceMask m) {
@@ -131,7 +138,15 @@ class QuakeScene : public merian::Scene {
     void update_sprite_entity(entity_t* ent);
     void update_particles();
     void update_animated_materials();
-    void update_transparency_constant();
+    void update_material_constants();
+    uint16_t quantized_fixture_emission(float radiance) const;
+    uint16_t model_fixture_emission(const entity_t* ent, aliashdr_t* hdr, int skin);
+    uint16_t sprite_fixture_emission(const entity_t* ent, mspriteframe_t* frame);
+    merian::MaterialID
+    ensure_alias_material(qmodel_t* model, aliashdr_t* hdr, int skin, uint16_t fixture_emission);
+    merian::Scene::MeshID
+    ensure_sprite_frame(const qmodel_t* model, mspriteframe_t* frame, uint16_t fixture_emission);
+    void load_light_entities();
     void update_camera();
 
   private:
@@ -160,26 +175,26 @@ class QuakeScene : public merian::Scene {
     merian::Scene::NodeID world_node_id = merian::Scene::NODE_ID_INVALID;
     std::vector<merian::Scene::MeshID> world_mesh_ids;
 
-    // Surfaces sharing (texture, surf_flags) share a material and a mesh.
-    struct TexFlagsKey {
+    struct BrushMaterialKey {
         texture_t* tex;
         int surf_flags;
         bool two_sided;
-        bool operator==(const TexFlagsKey& o) const noexcept {
-            return tex == o.tex && surf_flags == o.surf_flags && two_sided == o.two_sided;
+        uint8_t light_style;
+        uint32_t fixture_tint;
+        uint16_t fixture_emission;
+        bool animated() const {
+            return tex->anim_total > 0 || light_style != 0 ||
+                   (surf_flags & (MAT_TYPE_WATER | MAT_TYPE_SLIME)) != 0;
         }
-        bool operator<(const TexFlagsKey& o) const noexcept {
-            if (tex != o.tex)
-                return tex < o.tex;
-            if (surf_flags != o.surf_flags)
-                return surf_flags < o.surf_flags;
-            return two_sided < o.two_sided;
-        }
+        bool operator==(const BrushMaterialKey& o) const noexcept = default;
     };
-    struct TexFlagsKeyHash {
-        size_t operator()(const TexFlagsKey& k) const noexcept {
+    struct BrushMaterialKeyHash {
+        size_t operator()(const BrushMaterialKey& k) const noexcept {
             return std::hash<texture_t*>()(k.tex) ^ (std::hash<int>()(k.surf_flags) << 1u) ^
-                   (std::hash<bool>()(k.two_sided) << 2u);
+                   (std::hash<bool>()(k.two_sided) << 2u) ^
+                   (std::hash<uint8_t>()(k.light_style) << 3u) ^
+                   (std::hash<uint32_t>()(k.fixture_tint) << 4u) ^
+                   (std::hash<uint16_t>()(k.fixture_emission) << 5u);
         }
     };
     // SURF_PLANEBACK is per-vertex, SURF_DRAWTILED selects r_notexture; the
@@ -201,24 +216,58 @@ class QuakeScene : public merian::Scene {
         }
     };
 
-    // Pre-upload CPU buffer for one (texture, surf_flags) partition.
     struct BrushSurfaceBucket {
         std::vector<merian::PackedVertexData> vertices;
         std::vector<merian::uint3> indices;
-        texture_t* tex = nullptr;
-        int surf_flags = 0;
-        bool two_sided = false;
     };
-    std::unordered_map<TexFlagsKey, BrushSurfaceBucket, TexFlagsKeyHash>
+    std::unordered_map<BrushMaterialKey, BrushSurfaceBucket, BrushMaterialKeyHash>
     collect_brush_surfaces(qmodel_t* mod);
+    QuakeMaterial brush_material(const BrushMaterialKey& key, texture_t* tex, const entity_t* ent);
 
     // Per-owner so each brush entity's `frame` can resolve independently.
     struct AnimatedBrushMaterial {
         merian::MaterialID material_id;
-        texture_t* base_tex;
-        int surf_flags;
+        BrushMaterialKey key;
     };
     std::vector<AnimatedBrushMaterial> world_animated_materials;
+    MapLights map_lights;
+
+    struct LightEntityMaterial {
+        merian::MaterialID material_id;
+        uint8_t light_style;
+    };
+    std::vector<LightEntityMaterial> light_entity_materials;
+
+    bool light_sources_changed = false;
+    bool light_styles_enabled = true;
+    bool fixture_emission_enabled = true;
+    bool light_entities_enabled = true;
+    float light_entity_radius = 10.f;
+
+    struct Emission {
+        float fullbright_scale = 12.79F;
+        float fullbright_gamma = 0.4548F;
+        float fullbright_exponent = 0.03F;
+        float fullbright_max_level = 0.9639F;
+        float fullbright_red = -0.2786F;
+        float fullbright_yellow = 1.078F;
+        float fullbright_blue = 2.198F;
+        float fixture = 26.88F;
+        float waterfall = 18.98F;
+        float classic_sky_exp_scale = 0.F;
+        float classic_sky_exp_rate = 3.5F;
+        float classic_sky_pow_scale = 18.58F;
+        float classic_sky_pow_gamma = 1.392F;
+        float cube_sky_exp_scale = 0.F;
+        float cube_sky_exp_rate = 3.5F;
+        float cube_sky_pow_scale = 9.816F;
+        float cube_sky_pow_gamma = 1.558F;
+        float sun_lobe = 1136.F;
+        float sun_disc = 200.F;
+        float sun_kappa = 30000.F;
+        float switched_lights = 81.76F;
+    };
+    Emission emission;
 
     // Per-model info built at worldspawn; stable across frames.
     struct AliasModelInfo {
@@ -231,38 +280,52 @@ class QuakeScene : public merian::Scene {
     };
     std::unordered_map<qmodel_t*, AliasModelInfo> alias_model_info;
 
-    // One uploaded VB/IB pair per (texture, surf_flags) partition.
     struct BrushSubmodelGeoPart {
         merian::BufferHandle vb;
         merian::BufferHandle ib;
         uint32_t vertex_count;
         uint32_t primitive_count;
-        texture_t* tex;
-        int surf_flags;
+        BrushMaterialKey key;
         bool has_alpha;
-        bool two_sided;
     };
     std::unordered_map<qmodel_t*, std::vector<BrushSubmodelGeoPart>> brush_submodel_geo;
 
     struct AliasSkinKey {
         qmodel_t* model;
         int skin;
+        uint16_t fixture_emission;
         bool operator==(const AliasSkinKey& o) const = default;
     };
     struct AliasSkinKeyHash {
         size_t operator()(const AliasSkinKey& k) const noexcept {
-            return std::hash<qmodel_t*>()(k.model) ^ (std::hash<int>()(k.skin) << 1u);
+            return std::hash<qmodel_t*>()(k.model) ^ (std::hash<int>()(k.skin) << 1u) ^
+                   (std::hash<uint16_t>()(k.fixture_emission) << 2u);
         }
     };
     std::unordered_map<AliasSkinKey, merian::MaterialID, AliasSkinKeyHash>
         material_id_for_alias_skin;
+    std::unordered_map<merian::MaterialID, int> alias_material_frames;
+    std::unordered_map<AliasSkinKey, float, AliasSkinKeyHash> alias_projected_areas;
 
-    // Shared mesh + material per mspriteframe_t*; orientation/scale live on the entity node.
+    struct SpriteFrameKey {
+        mspriteframe_t* frame;
+        uint16_t fixture_emission;
+        bool operator==(const SpriteFrameKey& o) const = default;
+    };
+    struct SpriteFrameKeyHash {
+        size_t operator()(const SpriteFrameKey& k) const noexcept {
+            return std::hash<mspriteframe_t*>()(k.frame) ^
+                   (std::hash<uint16_t>()(k.fixture_emission) << 1u);
+        }
+    };
     struct SpriteFrameInfo {
         merian::Scene::MeshID mesh_id;
         merian::MaterialID material_id;
     };
-    std::unordered_map<mspriteframe_t*, SpriteFrameInfo> sprite_frame_info;
+    std::unordered_map<SpriteFrameKey, SpriteFrameInfo, SpriteFrameKeyHash> sprite_frame_info;
+    std::unordered_map<mspriteframe_t*, float> sprite_projected_areas;
+    SpriteFrameInfo
+    add_sprite_frame(const std::string& name, mspriteframe_t* frame, const QuakeMaterial& material);
 
     // owns_meshes=false marks sprite slots whose mesh is shared via sprite_frame_info.
     struct EntityMeshSlot {
@@ -278,6 +341,7 @@ class QuakeScene : public merian::Scene {
         mspriteframe_t* cached_sprite_frame = nullptr;
 
         uint8_t cached_alpha = ENTALPHA_DEFAULT;
+        uint16_t fixture_emission = 0;
         int cached_skinnum = -1;
         int cached_anim_frame = -1;
         int cached_pose1 = -1;

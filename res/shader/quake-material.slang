@@ -14,10 +14,45 @@ import merian_shaders.utils.normal_map;
 
 namespace merian {
 
-// this took way to long to get right...
-float3 ldr_to_hdr(float3 color) {
-    const float l = clamp(pow((color.r + color.g + color.b) / 3, .1), 0, 0.99);
-    return sqrt(color) * 2 * (l / (1.0 - l));
+extern static const float quake_fullbright_scale = 2.f;
+extern static const float quake_fullbright_gamma = 0.5f;
+extern static const float quake_fullbright_exponent = 0.1f;
+extern static const float quake_fullbright_max_level = 0.99f;
+extern static const float quake_fullbright_red = 0.f;
+extern static const float quake_fullbright_yellow = 0.f;
+extern static const float quake_fullbright_blue = 0.f;
+extern static const float quake_waterfall_emission = 1.f;
+extern static const float quake_fixture = 1.f;
+extern static const float quake_switched_lights = 1.f;
+
+float hue_weight(const float hue, const float center, const float width) {
+    return saturate(1 - abs(fmod(hue - center + 540, 360) - 180) / width);
+}
+
+float fullbright_hue_gain(const float3 color) {
+    const float v = max(color.r, max(color.g, color.b));
+    const float d = v - min(color.r, min(color.g, color.b));
+    if (d <= 0)
+        return 1;
+    float hue;
+    if (v == color.r)
+        hue = 60 * (color.g - color.b) / d;
+    else if (v == color.g)
+        hue = 60 * (2 + (color.b - color.r) / d);
+    else
+        hue = 60 * (4 + (color.r - color.g) / d);
+    hue = fmod(hue + 360, 360);
+    return max(0.f, 1 + d / v *
+                            (quake_fullbright_red * hue_weight(hue, 0, 40) +
+                             quake_fullbright_yellow * hue_weight(hue, 50, 50) +
+                             quake_fullbright_blue * hue_weight(hue, 220, 80)));
+}
+
+float3 ldr_to_hdr(const float3 color) {
+    const float l = min(pow((color.r + color.g + color.b) / 3, quake_fullbright_exponent),
+                        quake_fullbright_max_level);
+    return quake_fullbright_scale * pow(color, quake_fullbright_gamma) * (l / (1.0 - l)) *
+           fullbright_hue_gain(color);
 }
 
 float2 quake_warp(const float2 st, const float time) {
@@ -57,6 +92,7 @@ struct QuakeMaterial : MaterialModel {
     uint16_t flags; // MAT_TYPE_*
     uint8_t pane;
     uint8_t opacity;
+    uint16_t emission_scale;
 
     uint16_t get_flags() {
         return flags;
@@ -86,9 +122,23 @@ struct QuakeMaterial : MaterialModel {
 
     float get_emission_scale(const ShadingData sd) {
         const float coverage = get_coverage(sd);
-        return get_flags() == MAT_TYPE_WATERFALL
-                   ? min(1.f, coverage * QUAKE_WATERFALL_EMISSION_GAIN)
-                   : coverage;
+        return f16tof32(uint(emission_scale)) *
+               (get_flags() == MAT_TYPE_WATERFALL ? min(1.f, coverage * QUAKE_WATERFALL_EMISSION_GAIN)
+                                                  : coverage);
+    }
+
+    float3 fullbright_emission(const float3 color) {
+        return get_flags() == MAT_TYPE_FIXTURE ? quake_fixture * color : ldr_to_hdr(color);
+    }
+
+    float3 get_light_entity_emission(const ShadingData sd, const TextureManager tm) {
+        const float4 radiance = tm.get_sampler2D(fullbright_tex).SampleLevel(sd.uv, 0);
+        const float4 spot = tm.get_sampler2D(normal_tex).SampleLevel(sd.uv, 0);
+        if (spot.a > 0 && dot(sd.wi, spot.rgb * 2 - 1) < cos(radians(spot.a * 90))) {
+            return float3(0);
+        }
+        return quake_switched_lights * radiance.rgb *
+               exp2((radiance.a - 0.5) * LIGHT_ENTITY_LOG2_RADIANCE_RANGE);
     }
 
     override float3 get_emission(const ShadingData sd,
@@ -102,19 +152,19 @@ struct QuakeMaterial : MaterialModel {
             }
         }
 
-        const float emission_scale = get_emission_scale(sd);
-        if (get_flags() == MAT_TYPE_WATERFALL) {
+        float3 emission = float3(0);
+        if (get_flags() == MAT_TYPE_LIGHT_ENTITY) {
+            emission = get_light_entity_emission(sd, tm);
+        } else if (get_flags() == MAT_TYPE_WATERFALL) {
+            emission = float3(1, 0, 1);
             if (let albedo_tex_id = header.get_alpha_texture_id()) {
-                return emission_scale *
-                       pow(lod.sample(tm.get_sampler2D(albedo_tex_id), uv).rgb, 1. / 1.2);
+                emission = quake_waterfall_emission *
+                           pow(lod.sample(tm.get_sampler2D(albedo_tex_id), uv).rgb, 1. / 1.2);
             }
-            return emission_scale * float3(1, 0, 1);
+        } else if (fullbright_tex != TextureID(-1)) {
+            emission = fullbright_emission(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
         }
-        if (fullbright_tex != TextureID(-1)) {
-            return emission_scale *
-                   ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
-        }
-        return float3(0);
+        return min(get_emission_scale(sd) * emission, QUAKE_MAX_RADIANCE);
     }
 
     QuakeMaterialSample get_sample(const ShadingData sd,
@@ -124,7 +174,7 @@ struct QuakeMaterial : MaterialModel {
                                    out OrthonormalFrame out_shading_frame) {
         // Normal
         QuakeMaterialSample s;
-        if (normal_tex != TextureID(-1)) {
+        if (normal_tex != TextureID(-1) && get_flags() != MAT_TYPE_LIGHT_ENTITY) {
             const float3 n = (tm.get_sampler2D(normal_tex).SampleLevel(sd.uv, 0).rgb - 0.5) * 2;
             const OrthonormalFrame mapped = sd.frame.apply_normal_map(n);
             if (merian_hint_clamp_normals) {
@@ -156,19 +206,23 @@ struct QuakeMaterial : MaterialModel {
             albedo = pow(max(float3(0.0003), albedo), 1. / 1.2);
         }
 
-        if (get_flags() == MAT_TYPE_WATERFALL) {
-            out_emission = albedo;
+        if (get_flags() == MAT_TYPE_LIGHT_ENTITY) {
+            albedo = float3(0);
+            out_emission = get_light_entity_emission(sd, tm);
+        } else if (get_flags() == MAT_TYPE_WATERFALL) {
+            out_emission = quake_waterfall_emission * albedo;
             // } else if (get_flags() == MAT_TYPE_TELE || get_flags() == MAT_TYPE_SPRITE) {
             //     TODO: Fix on host side!
             //     out_emission = ldr_to_hdr(albedo);
         } else if (fullbright_tex != TextureID(-1)) {
-            out_emission = ldr_to_hdr(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
+            out_emission =
+                fullbright_emission(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
         } else {
             out_emission = float3(0);
         }
 
         const float coverage = get_coverage(sd);
-        out_emission *= get_emission_scale(sd);
+        out_emission = min(out_emission * get_emission_scale(sd), QUAKE_MAX_RADIANCE);
 
         float f0 = QUAKE_BASE_F0;
         if (gloss_tex != TextureID(-1)) {

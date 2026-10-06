@@ -1,3 +1,6 @@
+#include "merian-shaders/utils/math-constants.slangh"
+#include "shader/quake-material.slangh"
+
 __exported import merian_shaders.scene.environment_map;
 
 import merian_shaders.utils.envmap;
@@ -5,13 +8,34 @@ import merian_shaders.distributions.von_mises_fisher;
 
 namespace merian {
 
-static const float QUAKE_SUN_KAPPA = 3000.0;
+extern static const float quake_classic_sky_exp_scale = 10.f;
+extern static const float quake_classic_sky_exp_rate = 3.5f;
+extern static const float quake_classic_sky_pow_scale = 0.f;
+extern static const float quake_classic_sky_pow_gamma = 1.f;
+extern static const float quake_cube_sky_exp_scale = 0.f;
+extern static const float quake_cube_sky_exp_rate = 3.5f;
+extern static const float quake_cube_sky_pow_scale = 1.f;
+extern static const float quake_cube_sky_pow_gamma = 1.f;
+extern static const float quake_sun_lobe = 1.f;
+extern static const float quake_sun_disc = 1.f;
+extern static const float quake_sun_kappa = 3000.f;
+
+float3 sky_emission(const float3 tex,
+                    const float exp_scale,
+                    const float exp_rate,
+                    const float pow_scale,
+                    const float pow_gamma) {
+    return exp_scale * (exp2(exp_rate * tex) - 1.0) + pow_scale * pow(tex, pow_gamma);
+}
 
 float3 quake_sun(const float3 dir, const float3 sun_dir, const float3 sun_color) {
-    float3 sun = float3(0);
-    sun += 0.5hf * pow(0.5hf * (1.0hf + float16_t(dot(sun_dir, dir))), 4.0hf);
-    sun += 5.0hf * float16_t(vmf_pdf_tokuyoshi(dir, sun_dir, QUAKE_SUN_KAPPA));
-    return sun * sun_color;
+    const float lobe = 0.5 * pow(0.5 * (1.0 + dot(sun_dir, dir)), 4.0);
+    const float disc_peak = 5.0 * quake_sun_disc * max(sun_color.r, max(sun_color.g, sun_color.b));
+    const float kappa =
+        disc_peak > 0.0 ? min(quake_sun_kappa, MERIAN_TWO_PI * QUAKE_MAX_RADIANCE / disc_peak)
+                        : quake_sun_kappa;
+    const float disc = 5.0 * vmf_pdf_tokuyoshi(dir, sun_dir, kappa);
+    return min((quake_sun_lobe * lobe + quake_sun_disc * disc) * sun_color, QUAKE_MAX_RADIANCE);
 }
 
 struct QuakeClassicSkyEnvMap : IEnvMap {
@@ -27,7 +51,8 @@ struct QuakeClassicSkyEnvMap : IEnvMap {
         const float4 bck = lod.sample(tm.get_sampler2D(solid), st + 0.5 * t);
         const float4 fnt = lod.sample(tm.get_sampler2D(alpha), st + t);
         const float3 tex = lerp(bck.rgb, fnt.rgb, fnt.a);
-        float3 emission = 10.0 * (exp2(3.5 * tex) - 1.0);
+        float3 emission = sky_emission(tex, quake_classic_sky_exp_scale, quake_classic_sky_exp_rate,
+                                       quake_classic_sky_pow_scale, quake_classic_sky_pow_gamma);
         if (sd.bounce > 0) {
             emission += quake_sun(dir, sun_dir, sun_color);
         }
@@ -84,7 +109,9 @@ struct QuakeCubemapSkyEnvMap : IEnvMap {
         }
         }
 
-        float3 emission = lod.sample(tm.get_sampler2D(id), uv).rgb;
+        float3 emission = sky_emission(lod.sample(tm.get_sampler2D(id), uv).rgb,
+                                       quake_cube_sky_exp_scale, quake_cube_sky_exp_rate,
+                                       quake_cube_sky_pow_scale, quake_cube_sky_pow_gamma);
         if (sd.bounce > 0) {
             emission += quake_sun(dir, sun_dir, sun_color);
         }

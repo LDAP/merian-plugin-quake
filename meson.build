@@ -20,6 +20,7 @@ quake = dependency('quakespasm', fallback: ['quakespasm', 'quake_dep'],
 src = files(
     'src/plugin.cpp',
     'src/game/quake_extraction.cpp',
+    'src/game/quake_lights.cpp',
     'src/game/quake_node.cpp',
     'src/game/quake_scene.cpp',
     'src/game/quake_ui_node.cpp',
