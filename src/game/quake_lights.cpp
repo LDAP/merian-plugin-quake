@@ -29,9 +29,12 @@ namespace {
 
 constexpr uint8_t BRIGHT_TEXEL_THRESHOLD = 215;
 constexpr uint8_t LAMP_TEXEL_THRESHOLD = 180;
+constexpr float TINTED_SATURATION = 0.1f;
+constexpr float UNTINTED_SATURATION = 0.25f;
 constexpr uint8_t FIRST_FULLBRIGHT_INDEX = 224;
 constexpr uint8_t TRANSPARENT_INDEX = 255;
 constexpr float MIN_EMITTING_TEXEL_FRACTION = 0.02f;
+constexpr float SELF_LIT_FULLBRIGHT_FRACTION = 0.9f;
 constexpr float LAMP_LIGHT_DISTANCE = 48.f;
 constexpr float MODEL_EXCLUSION_DISTANCE = 32.f;
 constexpr float MODEL_ORIGIN_TOLERANCE = 16.f;
@@ -161,16 +164,16 @@ uint8_t max_channel(const uint8_t index) {
     return std::max({rgba[0], rgba[1], rgba[2]});
 }
 
-bool is_bright(const uint8_t index) {
-    return max_channel(index) >= BRIGHT_TEXEL_THRESHOLD;
+bool is_fullbright(const uint8_t index) {
+    return index >= FIRST_FULLBRIGHT_INDEX;
 }
 
 bool is_emitting(const uint8_t index) {
-    return index >= FIRST_FULLBRIGHT_INDEX || is_bright(index);
+    return is_fullbright(index) || max_channel(index) >= BRIGHT_TEXEL_THRESHOLD;
 }
 
 bool is_lamp_texel(const uint8_t index) {
-    return index >= FIRST_FULLBRIGHT_INDEX || max_channel(index) >= LAMP_TEXEL_THRESHOLD;
+    return is_fullbright(index) || max_channel(index) >= LAMP_TEXEL_THRESHOLD;
 }
 
 uint32_t pack_tint(const merian::float3& color) {
@@ -183,11 +186,19 @@ uint32_t pack_tint(const merian::float3& color) {
     return unorm(color.r) | unorm(color.g) << 8u | unorm(color.b) << 16u | 0xffu << 24u;
 }
 
-std::array<uint8_t, 4> tinted(std::array<uint8_t, 4> rgba, const uint32_t tint) {
+std::array<uint8_t, 4>
+tinted(std::array<uint8_t, 4> rgba, const uint32_t tint, const float amount = 1.f) {
     const auto tint_rgba = std::bit_cast<std::array<uint8_t, 4>>(tint);
     for (size_t c = 0; c < 4; c++)
-        rgba[c] = static_cast<uint8_t>(rgba[c] * tint_rgba[c] / 255);
+        rgba[c] = static_cast<uint8_t>(std::lround(
+            rgba[c] * (255.f + amount * (static_cast<float>(tint_rgba[c]) - 255.f)) / 255.f));
     return rgba;
+}
+
+float saturation(const std::array<uint8_t, 4>& rgba) {
+    const uint8_t high = std::max({rgba[0], rgba[1], rgba[2]});
+    const uint8_t low = std::min({rgba[0], rgba[1], rgba[2]});
+    return high > 0 ? static_cast<float>(high - low) / static_cast<float>(high) : 0.f;
 }
 
 float luminance(const std::array<uint8_t, 4>& rgba) {
@@ -207,14 +218,46 @@ const uint8_t* texture_pixels(const texture_t* tex) {
 
 bool has_pixels(const texture_t* tex) {
     return tex != r_notexture_mip && tex != r_notexture_mip2 && tex->width > 0 && tex->height > 0 &&
-           tex->name[0] != '*' && !std::string_view(tex->name).starts_with("sky");
+           !std::string_view(tex->name).starts_with("sky");
+}
+
+bool is_liquid(const texture_t* tex) {
+    return tex->name[0] == '*';
+}
+
+bool is_waterfall(const texture_t* tex) {
+    return strstr(tex->name, "wfall") != nullptr;
+}
+
+bool is_fence(const texture_t* tex) {
+    return tex->name[0] == '{';
+}
+
+bool is_fence_lamp_texel(const uint8_t index) {
+    return index != TRANSPARENT_INDEX && is_lamp_texel(index);
+}
+
+using TexelPredicate = bool (*)(uint8_t);
+
+TexelPredicate emissive_texels(const texture_t* tex) {
+    return is_liquid(tex) ? is_fullbright : is_emitting;
+}
+
+TexelPredicate lamp_texels(const texture_t* tex) {
+    if (is_liquid(tex))
+        return is_fullbright;
+    return is_fence(tex) ? is_fence_lamp_texel : is_lamp_texel;
+}
+
+uint64_t lamp_texel_kind(const texture_t* tex) {
+    return is_liquid(tex) ? 1 : is_fence(tex) ? 2 : 0;
 }
 
 template <typename Counts> float texel_fraction(const texture_t* tex, const Counts& counts) {
     std::array<bool, 256> counted_index;
     for (size_t i = 0; i < counted_index.size(); i++)
         counted_index[i] = counts(static_cast<uint8_t>(i));
-    const bool fence = tex->name[0] == '{';
+    const bool fence = is_fence(tex);
     const uint8_t* pixels = texture_pixels(tex);
     uint32_t opaque = 0;
     uint32_t counted = 0;
@@ -227,14 +270,20 @@ template <typename Counts> float texel_fraction(const texture_t* tex, const Coun
     return opaque > 0 ? static_cast<float>(counted) / static_cast<float>(opaque) : 0.f;
 }
 
-bool is_lamp_texture(const texture_t* tex) {
-    return has_pixels(tex) && tex->gltexture != nullptr &&
-           (tex->gltexture->flags & TEXPREF_ALPHA) == 0 &&
-           texel_fraction(tex, is_bright) >= MIN_EMITTING_TEXEL_FRACTION;
+bool is_emissive_texture(const texture_t* tex) {
+    return has_pixels(tex) &&
+           texel_fraction(tex, emissive_texels(tex)) >= MIN_EMITTING_TEXEL_FRACTION;
 }
 
-bool is_emissive_texture(const texture_t* tex) {
-    return has_pixels(tex) && texel_fraction(tex, is_emitting) >= MIN_EMITTING_TEXEL_FRACTION;
+enum class TextureRole : uint8_t { DARK, SELF_LIT, LAMP };
+
+TextureRole texture_role(const texture_t* tex) {
+    if (!is_emissive_texture(tex))
+        return TextureRole::DARK;
+    if (tex->gltexture == nullptr || is_waterfall(tex) ||
+        (is_liquid(tex) && texel_fraction(tex, is_fullbright) >= SELF_LIT_FULLBRIGHT_FRACTION))
+        return TextureRole::SELF_LIT;
+    return TextureRole::LAMP;
 }
 
 template <typename TexelLuminance, typename TileMean>
@@ -273,11 +322,21 @@ float mean_luminance(const std::vector<merian::float2>& polygon,
 
 using LuminanceTable = std::array<float, 256>;
 
-LuminanceTable emitted_luminance(const uint32_t tint) {
+std::array<uint8_t, 4> lamp_rgba(const uint8_t index, const uint32_t tint) {
+    const std::array<uint8_t, 4> rgba = palette_rgba(index);
+    if (!is_fullbright(index))
+        return tinted(rgba, tint);
+    return tinted(rgba, tint,
+                  std::clamp((UNTINTED_SATURATION - saturation(rgba)) /
+                                 (UNTINTED_SATURATION - TINTED_SATURATION),
+                             0.f, 1.f));
+}
+
+LuminanceTable emitted_luminance(const uint32_t tint, const TexelPredicate emits) {
     LuminanceTable table;
     for (size_t i = 0; i < table.size(); i++) {
         const auto index = static_cast<uint8_t>(i);
-        table[i] = is_lamp_texel(index) ? luminance(tinted(palette_rgba(index), tint)) : 0.f;
+        table[i] = emits(index) ? luminance(lamp_rgba(index, tint)) : 0.f;
     }
     return table;
 }
@@ -575,51 +634,61 @@ MapLights::MapLights(const char* entities, qmodel_t* world_model) : world(world_
             if (const auto it = templates.find(lowercase(tex->name)); it != templates.end())
                 template_lights.emplace(tex, it->second);
 
-    std::unordered_map<const texture_t*, bool> lamp_textures;
-    std::unordered_map<const texture_t*, bool> emissive_textures;
+    std::unordered_map<const texture_t*, TextureRole> texture_roles;
     std::vector<std::pair<const msurface_t*, size_t>> lamps;
+    std::unordered_map<const texture_t*, size_t> liquid_roots;
+    std::unordered_map<const texture_t*, std::vector<const msurface_t*>> unowned_liquid_faces;
+    std::vector<bool> liquid_owner(lights.size(), false);
     std::vector<float> projected_area(lights.size(), 0.f);
-    std::unordered_map<uint32_t, LuminanceTable> tables;
+    std::unordered_map<uint64_t, LuminanceTable> tables;
     std::unordered_map<const texture_t*, std::unordered_map<uint32_t, float>> tile_means;
-    const std::vector<bool> is_trigger = trigger_surfaces(parsed, *world);
-    for (int i = 0; i < world->numsurfaces; i++) {
-        if (is_trigger[i])
-            continue;
-        const msurface_t& surf = world->surfaces[i];
+    const auto lamp_area = [&](const msurface_t& surf, const uint32_t tint) {
         const texture_t* tex = surf.texinfo->texture;
-        const auto [emissive, emissive_inserted] = emissive_textures.try_emplace(tex, false);
-        if (emissive_inserted)
-            emissive->second = is_emissive_texture(tex);
-        if (emissive->second)
-            for (const size_t candidate : lights_near(
-                     lamp_candidate_cells, merian::as_float3(surf.mins) - LAMP_LIGHT_DISTANCE,
-                     merian::as_float3(surf.maxs) + LAMP_LIGHT_DISTANCE))
-                if (bounds(surf).distance_sq(lights[candidate].origin) <=
-                        LAMP_LIGHT_DISTANCE * LAMP_LIGHT_DISTANCE &&
-                    in_front_of(surf, lights[candidate].origin))
-                    near_emissive_surface[candidate] = true;
-        const auto [lamp, lamp_inserted] = lamp_textures.try_emplace(tex, false);
-        if (lamp_inserted)
-            lamp->second = is_lamp_texture(tex);
-        if (!lamp->second)
-            continue;
-
-        const LightEntity* light = surface_owner(surf);
-        if (light == nullptr)
-            continue;
-        const size_t index = static_cast<size_t>(light - lights.data());
-        lamps.emplace_back(&surf, index);
-        const uint32_t tint = pack_tint(light->color);
-        const auto [table, table_inserted] = tables.try_emplace(tint);
+        const auto [table, table_inserted] = tables.try_emplace(tint | lamp_texel_kind(tex) << 32u);
         if (table_inserted)
-            table->second = emitted_luminance(tint);
-        projected_area[index] += surface_projected_area(surf, table->second, [&] {
+            table->second = emitted_luminance(tint, lamp_texels(tex));
+        return surface_projected_area(surf, table->second, [&] {
             const auto [mean, mean_inserted] = tile_means[tex].try_emplace(tint, 0.f);
             if (mean_inserted)
                 mean->second =
                     texture_mean(texture_pixels(tex), tex->width * tex->height, table->second);
             return mean->second;
         });
+    };
+    const std::vector<bool> is_trigger = trigger_surfaces(parsed, *world);
+    for (int i = 0; i < world->numsurfaces; i++) {
+        if (is_trigger[i])
+            continue;
+        const msurface_t& surf = world->surfaces[i];
+        const texture_t* tex = surf.texinfo->texture;
+        const auto [role, role_inserted] = texture_roles.try_emplace(tex, TextureRole::DARK);
+        if (role_inserted)
+            role->second = texture_role(tex);
+        if (role->second == TextureRole::DARK)
+            continue;
+        for (const size_t candidate :
+             lights_near(lamp_candidate_cells, merian::as_float3(surf.mins) - LAMP_LIGHT_DISTANCE,
+                         merian::as_float3(surf.maxs) + LAMP_LIGHT_DISTANCE))
+            if (bounds(surf).distance_sq(lights[candidate].origin) <=
+                    LAMP_LIGHT_DISTANCE * LAMP_LIGHT_DISTANCE &&
+                in_front_of(surf, lights[candidate].origin))
+                near_emissive_surface[candidate] = true;
+        if (role->second == TextureRole::SELF_LIT)
+            continue;
+
+        const LightEntity* light = surface_owner(surf);
+        if (light == nullptr) {
+            if (is_liquid(tex))
+                unowned_liquid_faces[tex].push_back(&surf);
+            continue;
+        }
+        const size_t index = static_cast<size_t>(light - lights.data());
+        if (is_liquid(tex)) {
+            liquid_owner[index] = true;
+            liquid_roots.try_emplace(tex, index);
+        }
+        lamps.emplace_back(&surf, index);
+        projected_area[index] += lamp_area(surf, pack_tint(light->color));
         if (!light->surface.empty()) {
             intensity[index] += own_intensity(*light);
         } else {
@@ -628,12 +697,20 @@ MapLights::MapLights(const char* entities, qmodel_t* world_model) : world(world_
         }
     }
 
+    for (const auto& [tex, faces] : unowned_liquid_faces)
+        if (const auto root = liquid_roots.find(tex); root != liquid_roots.end())
+            for (const msurface_t* surf : faces) {
+                lamps.emplace_back(surf, root->second);
+                projected_area[root->second] +=
+                    lamp_area(*surf, pack_tint(lights[root->second].color));
+            }
+
     std::vector<size_t> receivers;
     std::vector<size_t> lamp_owners;
     for (size_t i = 0; i < lights.size(); i++) {
-        if (receives[i])
+        if (receives[i] && !liquid_owner[i])
             receivers.push_back(i);
-        if (receives[i] && !lights[i].has_model)
+        if (receives[i] && !lights[i].has_model && !liquid_owner[i])
             lamp_owners.push_back(i);
     }
     for (const size_t i : lamp_candidates) {
@@ -657,6 +734,10 @@ MapLights::MapLights(const char* entities, qmodel_t* world_model) : world(world_
             if (lights[j].style == lights[i].style &&
                 merian::length(lights[j].origin - lights[i].origin) < DONOR_DISTANCE)
                 fixture_parents[find_root(fixture_parents, j)] = find_root(fixture_parents, i);
+    for (const auto& [surf, index] : lamps)
+        if (const auto root = liquid_roots.find(surf->texinfo->texture); root != liquid_roots.end())
+            fixture_parents[find_root(fixture_parents, index)] =
+                find_root(fixture_parents, root->second);
 
     std::vector<float> fixture_intensity(lights.size(), 0.f);
     std::vector<float> fixture_area(lights.size(), 0.f);
@@ -769,10 +850,11 @@ gltexture_t* MapLights::ensure_emission_texture(texture_t* tex, const uint32_t t
             EmissionTexture& emission = it->second;
             const uint32_t texel_count = frame->width * frame->height;
             const uint8_t* pixels = texture_pixels(frame);
+            const TexelPredicate emits = lamp_texels(frame);
             emission.rgba.resize(static_cast<size_t>(texel_count) * 4);
             for (uint32_t i = 0; i < texel_count; i++)
-                if (is_lamp_texel(pixels[i]))
-                    std::ranges::copy(tinted(palette_rgba(pixels[i]), tint),
+                if (emits(pixels[i]))
+                    std::ranges::copy(lamp_rgba(pixels[i], tint),
                                       emission.rgba.begin() + 4 * static_cast<size_t>(i));
             char name[64];
             q_snprintf(name, sizeof(name), "%s:%s_fixture_%08x", world->name, frame->name, tint);

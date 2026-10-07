@@ -95,7 +95,11 @@ struct QuakeMaterial : MaterialModel {
     uint16_t emission_scale;
 
     uint16_t get_flags() {
-        return flags;
+        return flags & ~uint16_t(MAT_TYPE_FIXTURE);
+    }
+
+    bool is_fixture() {
+        return (flags & MAT_TYPE_FIXTURE) != 0u;
     }
 
     bool is_translucent() {
@@ -113,22 +117,30 @@ struct QuakeMaterial : MaterialModel {
         }
     }
 
-    float get_coverage(const ShadingData sd) {
+    float get_coverage(const ShadingData sd, const TextureManager tm) {
+        if (get_flags() == MAT_TYPE_PARTICLE) {
+            if (!quake_enable_transparency) {
+                return 1.f;
+            }
+            const float alpha = tm.get_sampler2D(header.alpha_texture_id).SampleLevel(sd.uv, 0).a;
+            // cos^2 sums to 1 over the three discs, which hides their seams
+            const float cos_theta = dot(sd.wi, sd.face_normal);
+            return float(opacity) / 255.f * saturate(2.f * alpha - 1.f) * cos_theta * cos_theta;
+        }
         if (!is_translucent()) {
             return 1.f;
         }
         return dot(sd.wi, sd.face_normal) < 0.f ? 0.f : float(opacity) / 255.f;
     }
 
-    float get_emission_scale(const ShadingData sd) {
-        const float coverage = get_coverage(sd);
+    float get_emission_scale(const float coverage) {
         return f16tof32(uint(emission_scale)) *
                (get_flags() == MAT_TYPE_WATERFALL ? min(1.f, coverage * QUAKE_WATERFALL_EMISSION_GAIN)
                                                   : coverage);
     }
 
     float3 fullbright_emission(const float3 color) {
-        return get_flags() == MAT_TYPE_FIXTURE ? quake_fixture * color : ldr_to_hdr(color);
+        return is_fixture() ? quake_fixture * color : ldr_to_hdr(color);
     }
 
     float3 get_light_entity_emission(const ShadingData sd, const TextureManager tm) {
@@ -147,7 +159,7 @@ struct QuakeMaterial : MaterialModel {
         float2 uv = sd.uv;
         if ((flags & MAT_TYPE_WARP) != 0u) {
             uv = quake_warp(uv, sd.time);
-            if (flags == MAT_TYPE_WATER) {
+            if (get_flags() == MAT_TYPE_WATER) {
                 uv += quake_waves(uv, sd.time);
             }
         }
@@ -164,7 +176,7 @@ struct QuakeMaterial : MaterialModel {
         } else if (fullbright_tex != TextureID(-1)) {
             emission = fullbright_emission(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
         }
-        return min(get_emission_scale(sd) * emission, QUAKE_MAX_RADIANCE);
+        return min(get_emission_scale(get_coverage(sd, tm)) * emission, QUAKE_MAX_RADIANCE);
     }
 
     QuakeMaterialSample get_sample(const ShadingData sd,
@@ -193,7 +205,7 @@ struct QuakeMaterial : MaterialModel {
         float2 uv = sd.uv;
         if ((flags & MAT_TYPE_WARP) != 0u) {
             uv = quake_warp(uv, sd.time);
-            if (flags == MAT_TYPE_WATER) {
+            if (get_flags() == MAT_TYPE_WATER) {
                 uv += quake_waves(uv, sd.time);
                 roughness = 0.4f;
             }
@@ -221,8 +233,8 @@ struct QuakeMaterial : MaterialModel {
             out_emission = float3(0);
         }
 
-        const float coverage = get_coverage(sd);
-        out_emission = min(out_emission * get_emission_scale(sd), QUAKE_MAX_RADIANCE);
+        const float coverage = get_coverage(sd, tm);
+        out_emission = min(out_emission * get_emission_scale(coverage), QUAKE_MAX_RADIANCE);
 
         float f0 = QUAKE_BASE_F0;
         if (gloss_tex != TextureID(-1)) {

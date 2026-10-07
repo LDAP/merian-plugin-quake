@@ -34,11 +34,13 @@ bool sprite_world_basis(entity_t* ent,
                         merian::float3& s_up,
                         merian::float3& s_right);
 
-// Particle billboards. `no_random` makes the per-particle jitter reproducible.
+constexpr uint32_t PARTICLE_ATLAS_SIZE = 256;
+
+std::vector<uint32_t> particle_atlas(const uint32_t* palette);
+
 void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
                           std::vector<merian::float3>& prev_positions,
                           std::vector<merian::uint3>& indices,
-                          bool no_random,
-                          double prev_cl_time);
+                          float size);
 
 } // namespace merian_quake

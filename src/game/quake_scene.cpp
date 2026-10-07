@@ -813,26 +813,29 @@ bool is_glass(const texture_t* tex) {
            strstr(name, "window") != nullptr;
 }
 
+bool is_liquid(const int surf_flags) {
+    return (surf_flags & (MAT_TYPE_WATER | MAT_TYPE_SLIME)) != 0;
+}
+
 float brush_opacity(const entity_t* ent, const texture_t* tex, const int surf_flags) {
-    const bool liquid = (surf_flags & (SURF_DRAWWATER | SURF_DRAWSLIME)) != 0 || is_waterfall(tex);
-    float opacity = 1.F;
-    if (ent != nullptr && ent->alpha != ENTALPHA_DEFAULT)
-        opacity = ENTALPHA_DECODE(ent->alpha);
-    else if ((surf_flags & SURF_DRAWSLIME) != 0)
-        opacity = map_slimealpha > 0 ? map_slimealpha : map_wateralpha;
-    else if (liquid)
-        opacity = map_wateralpha;
+    const int blend_flags = is_waterfall(tex) ? SURF_DRAWWATER : surf_flags;
+    float opacity = ent != nullptr ? ENTALPHA_DECODE(ent->alpha) : 1.F;
+    if ((blend_flags & MAT_TYPE_WARP) != 0) {
+        msurface_t surf{};
+        surf.flags = blend_flags;
+        opacity = GL_WaterAlphaForEntitySurface(const_cast<entity_t*>(ent), &surf);
+    }
     if (opacity >= 1.F)
         return opacity;
     if (is_fog(tex))
         return std::min(opacity * FOG_OPACITY_SCALE, 1.F);
     if (is_waterfall(tex))
         return opacity * TRANSLUCENT_LIQUID_OPACITY_SCALE * WATERFALL_OPACITY_SCALE;
-    return liquid ? opacity * TRANSLUCENT_LIQUID_OPACITY_SCALE : opacity;
+    return is_liquid(blend_flags) ? opacity * TRANSLUCENT_LIQUID_OPACITY_SCALE : opacity;
 }
 
 uint8_t brush_pane(const texture_t* tex, const int surf_flags) {
-    if ((surf_flags & MAT_TYPE_WARP) != 0)
+    if (is_liquid(surf_flags))
         return is_waterfall(tex) || is_fog(tex) ? PANE_NONE : PANE_LIQUID;
     return is_glass(tex) ? PANE_GLASS : PANE_NONE;
 }
@@ -851,7 +854,8 @@ bool is_static_entity(const entity_t* ent) {
 }
 
 QuakeMaterial as_fixture(QuakeMaterial m, const uint16_t emission) {
-    m.payload.surface_flags = MAT_TYPE_FIXTURE;
+    m.payload.surface_flags =
+        static_cast<uint16_t>(MAT_TYPE_FIXTURE | (m.payload.surface_flags & MAT_TYPE_WARP));
     m.payload.emission_scale = emission;
     return m;
 }
@@ -1057,19 +1061,21 @@ void QuakeScene::unload_world() {
 
 void QuakeScene::load_world(const merian::CommandBufferHandle& cmd) {
     {
-        MERIAN_PROFILE_SCOPE("upload_palette");
+        MERIAN_PROFILE_SCOPE("upload_particle_atlases");
         const auto& tm = get_texture_manager();
-        tm->set_texture_from_rgba8(PALETTE_TEXTURE, d_8to24table, 256, 1,
-                                   vk::SamplerAddressMode::eClampToEdge, vk::Filter::eNearest,
-                                   vk::Filter::eNearest, true, false);
+        tm->set_texture_from_rgba8(PARTICLE_TEXTURE, particle_atlas(d_8to24table).data(),
+                                   PARTICLE_ATLAS_SIZE, PARTICLE_ATLAS_SIZE,
+                                   vk::SamplerAddressMode::eClampToEdge, vk::Filter::eLinear,
+                                   vk::Filter::eLinear, true, false);
         // fullbright palette hack for rocket trails and explosions
         std::array<uint32_t, 256> fb_palette{};
         std::memcpy(fb_palette.data(), d_8to24table_fbright, sizeof(fb_palette));
         for (uint32_t i = 96; i <= 111; i++)
             fb_palette[i] = d_8to24table[i];
-        tm->set_texture_from_rgba8(FULLBRIGHT_PALETTE_TEXTURE, fb_palette.data(), 256, 1,
-                                   vk::SamplerAddressMode::eClampToEdge, vk::Filter::eNearest,
-                                   vk::Filter::eNearest, true, false);
+        tm->set_texture_from_rgba8(FULLBRIGHT_PARTICLE_TEXTURE,
+                                   particle_atlas(fb_palette.data()).data(), PARTICLE_ATLAS_SIZE,
+                                   PARTICLE_ATLAS_SIZE, vk::SamplerAddressMode::eClampToEdge,
+                                   vk::Filter::eLinear, vk::Filter::eLinear, true, false);
     }
 
     {
@@ -1331,9 +1337,8 @@ void QuakeScene::register_alias_models(const merian::CommandBufferHandle& cmd) {
 void QuakeScene::register_sprite_models() {
     const auto register_frame = [&](qmodel_t* mod, mspriteframe_t* frame, int debug_idx) {
         if (frame != nullptr && !sprite_frame_info.contains({frame, 0}))
-            sprite_frame_info[{frame, 0}] =
-                add_sprite_frame(fmt::format("sprite:{}:{}", mod->name, debug_idx), frame,
-                                 make_sprite_frame_material(frame));
+            sprite_frame_info[{frame, 0}] = add_sprite_frame(
+                fmt::format("sprite:{}:{}", mod->name, debug_idx), frame, sprite_material(frame));
     };
 
     for (int i = 1; i < MAX_MODELS; i++) {
@@ -1391,12 +1396,8 @@ QuakeScene::SpriteFrameInfo QuakeScene::add_sprite_frame(const std::string& name
 }
 
 void QuakeScene::init_particle_batch() {
-    QuakeMaterial particle_mat;
-    particle_mat.header.alpha_texture_id = PALETTE_TEXTURE;
-    particle_mat.payload.fullbright_tex = FULLBRIGHT_PALETTE_TEXTURE;
-    particle_mat.payload.surface_flags = MAT_TYPE_NONE;
     particle_material_id =
-        get_material_system()->add_material(quake_material_type_id, particle_mat);
+        get_material_system()->add_material(quake_material_type_id, particle_material());
 
     merian::Scene::Node node;
     node.name = "particles";
@@ -1407,7 +1408,7 @@ void QuakeScene::init_particle_batch() {
     mesh->material_id = particle_material_id;
     mesh->flags = merian::Scene::MeshFlags::IsMorphed |
                   merian::Scene::MeshFlags::HasVariableTopology |
-                  merian::Scene::MeshFlags::FlipFacing;
+                  merian::Scene::MeshFlags::TwoSided;
     mesh->instance_mask = to_mask(InstanceMask::PARTICLE);
     particle_mesh_id = add_mesh(std::move(mesh));
     // update_particles attaches the instance lazily on first non-empty extraction.
@@ -1524,11 +1525,9 @@ void QuakeScene::update_alias_entity(entity_t* ent,
                     alias_material_frames.try_emplace(mesh.material_id, anim_frame);
                 inserted || it->second != anim_frame) {
                 it->second = anim_frame;
-                const QuakeMaterial material = make_alias_material(hdr, skin, anim_frame);
                 get_material_system()->update_material(
-                    mesh.material_id, slot->fixture_emission != 0
-                                          ? as_fixture(material, slot->fixture_emission)
-                                          : material);
+                    mesh.material_id,
+                    alias_material(hdr, skin, anim_frame, slot->fixture_emission));
             }
             slot->cached_skinnum = ent->skinnum;
             slot->cached_anim_frame = anim_frame;
@@ -1758,8 +1757,7 @@ void QuakeScene::update_particles() {
     mesh.indices.clear();
 
     std::vector<merian::float3> prev_pos;
-    extract_particle_geo(mesh.vertices, prev_pos, mesh.indices, reproducible_renders, prev_cl_time);
-    prev_cl_time = cl.time;
+    extract_particle_geo(mesh.vertices, prev_pos, mesh.indices, particle_size);
 
     mesh.prev_vertices.resize(prev_pos.size());
     for (size_t i = 0; i < prev_pos.size(); i++)
@@ -1817,13 +1815,21 @@ merian::MaterialID QuakeScene::ensure_alias_material(qmodel_t* model,
                                                      const uint16_t fixture_emission) {
     const auto [it, inserted] = material_id_for_alias_skin.try_emplace(
         {model, skin, fixture_emission}, merian::MaterialID{});
-    if (inserted) {
-        const QuakeMaterial material = make_alias_material(hdr, skin);
+    if (inserted)
         it->second = get_material_system()->add_material(
-            quake_material_type_id,
-            fixture_emission != 0 ? as_fixture(material, fixture_emission) : material);
-    }
+            quake_material_type_id, alias_material(hdr, skin, 0, fixture_emission));
     return it->second;
+}
+
+QuakeMaterial QuakeScene::alias_material(aliashdr_t* hdr,
+                                         const int skin,
+                                         const int anim_frame,
+                                         const uint16_t fixture_emission) const {
+    QuakeMaterial m = make_alias_material(hdr, skin, anim_frame);
+    if (fixture_emission != 0)
+        return as_fixture(m, fixture_emission);
+    m.payload.emission_scale = merian::half(emission.alias_model).data;
+    return m;
 }
 
 merian::Scene::MeshID QuakeScene::ensure_sprite_frame(const qmodel_t* model,
@@ -1835,6 +1841,30 @@ merian::Scene::MeshID QuakeScene::ensure_sprite_frame(const qmodel_t* model,
             add_sprite_frame(fmt::format("fixture sprite:{}", model->name), frame,
                              as_fixture(make_sprite_frame_material(frame), fixture_emission));
     return it->second.mesh_id;
+}
+
+QuakeMaterial QuakeScene::sprite_material(mspriteframe_t* frame) const {
+    QuakeMaterial m = make_sprite_frame_material(frame);
+    m.payload.emission_scale = merian::half(emission.sprite).data;
+    return m;
+}
+
+QuakeMaterial QuakeScene::particle_material() const {
+    QuakeMaterial m;
+    m.header.alpha_texture_id = PARTICLE_TEXTURE;
+    m.payload.fullbright_tex = FULLBRIGHT_PARTICLE_TEXTURE;
+    m.payload.surface_flags = MAT_TYPE_PARTICLE;
+    m.payload.opacity =
+        static_cast<uint8_t>(std::lround(std::clamp(particle_opacity, 0.F, 1.F) * 255.F));
+    m.payload.emission_scale = merian::half(emission.particle).data;
+    return m;
+}
+
+void QuakeScene::update_sprite_materials() {
+    const auto& material_system = get_material_system();
+    for (const auto& [key, info] : sprite_frame_info)
+        if (key.fixture_emission == 0)
+            material_system->update_material(info.material_id, sprite_material(key.frame));
 }
 
 void QuakeScene::update_material_constants() {
@@ -1872,8 +1902,13 @@ void QuakeScene::update_material_constants() {
 QuakeMaterial
 QuakeScene::brush_material(const BrushMaterialKey& key, texture_t* tex, const entity_t* ent) {
     QuakeMaterial m = make_brush_material(tex, key.surf_flags, ent, key.light_style);
-    if (key.fixture_emission == 0 || brush_opacity(ent, tex, key.surf_flags) < 1)
+    if (key.fixture_emission == 0) {
+        if (m.payload.surface_flags != MAT_TYPE_WATERFALL)
+            m.payload.emission_scale =
+                merian::half(light_style_value(key.light_style) * emission.fullbright_fallback)
+                    .data;
         return m;
+    }
     m.payload.fullbright_tex = static_cast<merian::TextureID>(
         map_lights.ensure_emission_texture(tex, key.fixture_tint)->texnum);
     merian::half fixture_emission;
@@ -1995,8 +2030,6 @@ void QuakeScene::properties(merian::Properties& config) {
     config.config_int("stop after worldspawn", stop_after_worldspawn,
                       "Can be used for reference renders.");
     config.config_bool("rebuild after stop", rebuild_after_stop);
-    config.config_bool("reproducible renders", reproducible_renders,
-                       "e.g. disables random behavior");
 
     config.st_separate("Debug / Info");
     config.config_bool("overwrite sun", overwrite_sun);
@@ -2054,6 +2087,21 @@ void QuakeScene::properties(merian::Properties& config) {
         constant("fullbright yellow", e.fullbright_yellow, 0.01F, -1.F);
         constant("fullbright blue", e.fullbright_blue, 0.01F, -1.F);
         constant("waterfall", e.waterfall, 0.01F, 0.F);
+        if (config.config_float("sprite", e.sprite, "Sprites without a light entity.", 0.01F, 0.F))
+            update_sprite_materials();
+        bool particle_changed =
+            config.config_float("particle", e.particle, "Particle effects.", 0.01F, 0.F);
+        config.config_float("particle size", particle_size, "Relative to QuakeSpasm's dot.", 0.01F,
+                            0.F);
+        particle_changed |= config.config_percent("particle opacity", particle_opacity,
+                                                  "Opacity at the particle center.");
+        if (particle_changed && particle_mesh_id != merian::Scene::MeshID{})
+            get_material_system()->update_material(particle_material_id, particle_material());
+        lights_changed |=
+            config.config_float("fullbright fallback", e.fullbright_fallback,
+                                "Fullbright surfaces without a light entity.", 0.01F, 0.F);
+        lights_changed |= config.config_float("alias model", e.alias_model,
+                                              "Models without a light entity.", 0.01F, 0.F);
         config.st_separate("Sky: exp scale * (2^(exp rate * t) - 1) + pow scale * t^gamma");
         constant("classic exp scale", e.classic_sky_exp_scale, 0.01F, 0.F);
         constant("classic exp rate", e.classic_sky_exp_rate, 0.01F, 0.F);

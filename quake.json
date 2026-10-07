@@ -123,14 +123,14 @@
             ],
             "properties": {
                 "ISO": 856.0,
-                "K": 4.0,
+                "K": 2.963,
                 "aperature": 1.1200000047683716,
                 "autoexposure": true,
-                "max exposure": 120.6,
+                "max exposure": 199.6,
                 "max log luminance": 27.0,
                 "metering": "center-weighted",
-                "min exposure": 1.206e-08,
-                "min log luminance": -8.627,
+                "min exposure": 1.996e-08,
+                "min log luminance": -9.353,
                 "q": 0.6499999761581421,
                 "shutter time (ms)": 768.0,
                 "speed down": 5.099999904632568,
@@ -210,7 +210,6 @@
                 "overwrite mu_t/s": false,
                 "overwrite sun": false,
                 "rebuild after stop": true,
-                "reproducible renders": false,
                 "settings": {
                     "Alpha Test Threshold": 0.699999988079071,
                     "BLAS Rebuild Fraction": 0.33000001311302185,
@@ -230,7 +229,7 @@
             "properties": {
                 "alpha mode": "Perceptual luminance",
                 "clamp output": true,
-                "max white": 20.68,
+                "max white": 22.84,
                 "perceptual exponent": 2.200000047683716,
                 "tonemap": "Reinhard Extended"
             },

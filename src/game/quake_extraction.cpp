@@ -9,7 +9,7 @@
 extern "C" {
 #include "quakedef.h"
 
-extern particle_t* active_particles;
+extern particle_t *active_particles, *particles;
 extern cvar_t scr_fov, cl_gun_fovscale;
 }
 
@@ -112,88 +112,94 @@ bool sprite_world_basis(entity_t* ent,
     return true;
 }
 
+namespace {
+
+constexpr uint32_t PARTICLE_ATLAS_TILES = 16;
+constexpr uint32_t PARTICLE_TILE_SIZE = PARTICLE_ATLAS_SIZE / PARTICLE_ATLAS_TILES;
+constexpr float PARTICLE_TILE_RADIUS = 0.5f * PARTICLE_TILE_SIZE - 0.5f;
+constexpr float QUAKESPASM_PARTICLE_RADIUS = 0.25f * 1.27f;
+
+merian::float2 particle_uv(const uint32_t index, const merian::float2 disc) {
+    const merian::float2 tile(static_cast<float>(index % PARTICLE_ATLAS_TILES),
+                              static_cast<float>(index / PARTICLE_ATLAS_TILES));
+    return (tile * static_cast<float>(PARTICLE_TILE_SIZE) + 0.5f * PARTICLE_TILE_SIZE +
+            disc * PARTICLE_TILE_RADIUS) /
+           static_cast<float>(PARTICLE_ATLAS_SIZE);
+}
+
+} // namespace
+
+std::vector<uint32_t> particle_atlas(const uint32_t* palette) {
+    std::vector<uint32_t> atlas(static_cast<size_t>(PARTICLE_ATLAS_SIZE) * PARTICLE_ATLAS_SIZE);
+    for (uint32_t y = 0; y < PARTICLE_ATLAS_SIZE; y++) {
+        for (uint32_t x = 0; x < PARTICLE_ATLAS_SIZE; x++) {
+            const uint32_t index =
+                (y / PARTICLE_TILE_SIZE) * PARTICLE_ATLAS_TILES + x / PARTICLE_TILE_SIZE;
+            const merian::float2 disc =
+                (merian::float2(static_cast<float>(x % PARTICLE_TILE_SIZE),
+                                static_cast<float>(y % PARTICLE_TILE_SIZE)) +
+                 0.5f - 0.5f * PARTICLE_TILE_SIZE) /
+                PARTICLE_TILE_RADIUS;
+            const float r2 = merian::dot(disc, disc);
+            const float alpha = r2 < 1.f ? 0.5f + 0.5f * (1.f - r2) * (1.f - r2) : 0.f;
+            atlas[y * PARTICLE_ATLAS_SIZE + x] =
+                (palette[index] & 0x00ffffffu) | static_cast<uint32_t>(std::lround(alpha * 255))
+                                                     << 24u;
+        }
+    }
+    return atlas;
+}
+
 void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
                           std::vector<merian::float3>& prev_positions,
                           std::vector<merian::uint3>& indices,
-                          const bool no_random,
-                          const double prev_cl_time) {
-    static const merian::float3 voff[4] = {
-        {0.0f, 1.0f, 0.0f},
-        {-0.5f, -0.5f, 0.87f},
-        {-0.5f, -0.5f, -0.87f},
-        {1.0f, -0.5f, 0.0f},
-    };
+                          const float size) {
+    static const merian::float2 corners[4] = {{-1.f, -1.f}, {1.f, -1.f}, {1.f, 1.f}, {-1.f, 1.f}};
 
-    vec3_t vpn, vright, vup, r_origin;
-    VectorCopy(r_refdef.vieworg, r_origin);
+    vec3_t vpn, vright, vup;
     AngleVectors(r_refdef.viewangles, vpn, vright, vup);
+    const merian::float3 eye = merian::as_float3(r_refdef.vieworg);
 
     for (particle_t* p = active_particles; p != nullptr; p = p->next) {
-        float scale = (p->org[0] - r_origin[0]) * vpn[0] + (p->org[1] - r_origin[1]) * vpn[1] +
-                      (p->org[2] - r_origin[2]) * vpn[2];
-        if (scale < 20.f)
-            scale = 1.08f;
-        else
-            scale = 1.f + scale * 0.004f;
-        scale *= 0.5f;
-
-        const uint32_t seed = no_random ? static_cast<uint32_t>(p->die)
-                                        : static_cast<uint32_t>(reinterpret_cast<uint64_t>(p));
-        merian::XORShift32 xrand{seed};
-
-        const float velocity = merian::length(merian::as_float3(p->vel));
-        const merian::float3 origin = merian::as_float3(p->org);
-        const merian::float3 prev_origin =
-            p->mv_prev_valid ? merian::as_float3(p->mv_prev_origin) : origin;
-
-        const float particle_offset = static_cast<float>(2.0 * (xrand.next_double() - 0.5) +
-                                                         2.0 * (xrand.next_double() - 0.5));
-        const float rand_angle = static_cast<float>(xrand.next_double());
-        const merian::float3 rand_v = merian::normalize(merian::float3(
-            static_cast<float>(xrand.next_double()), static_cast<float>(xrand.next_double()),
-            static_cast<float>(xrand.next_double())));
-
-        const merian::float4x4 rot = merian::rotation(
-            rand_v, (rand_angle + cl.time * 0.001f * velocity) * 2.f * static_cast<float>(M_PI));
-        const double prev_time = p->mv_prev_valid ? prev_cl_time : cl.time;
-        const merian::float4x4 prev_rot = merian::rotation(
-            rand_v, (rand_angle + prev_time * 0.001f * velocity) * 2.f * static_cast<float>(M_PI));
-
-        merian::float3 vert[4];
-        merian::float3 prev_vert[4];
-        for (int k = 0; k < 4; k++) {
-            const float vert_off = static_cast<float>(
-                0.5 * ((xrand.next_double() - 0.5) + (xrand.next_double() - 0.5)));
-            const float rand_scale = static_cast<float>(xrand.next_double());
-            const merian::float4 corner(scale * voff[k] * (1.f + rand_scale) + vert_off, 1.f);
-            vert[k] = origin + particle_offset + merian::mul(rot, corner).xyz();
-            prev_vert[k] = prev_origin + particle_offset + merian::mul(prev_rot, corner).xyz();
-        }
+        merian::XORShift32 xrand{static_cast<uint32_t>(p - particles + 1) * 2654435761u};
+        const float jitter = 2.f * (xrand.next_float() - 0.5f) + 2.f * (xrand.next_float() - 0.5f);
+        const merian::float3 center = merian::as_float3(p->org) + jitter;
+        const merian::float3 prev_center =
+            (p->mv_prev_valid ? merian::as_float3(p->mv_prev_origin) : merian::as_float3(p->org)) +
+            jitter;
         VectorCopy(p->org, p->mv_prev_origin);
         p->mv_prev_valid = true;
 
-        // One tetrahedron per particle. uv.x is the palette index in [0,1] so the
-        // particle material samples the diffuse / emission palette by uv.
-        const uint32_t base = static_cast<uint32_t>(vertices.size());
-        const float palette_uv =
-            (static_cast<float>(static_cast<int>(p->color) & 0xff) + 0.5f) / 256.f;
-        for (int k = 0; k < 4; k++) {
-            merian::PackedVertexData pv{};
-            pv.position = vert[k];
-            pv.uv = merian::half2(palette_uv, 0.f);
-            pv.encoded_tangent = 0;
-            // Radial outward from the centroid — close enough to the averaged
-            // face normal for billboard-style shading.
-            const merian::float3 centroid = 0.25f * (vert[0] + vert[1] + vert[2] + vert[3]);
-            pv.encoded_normal = merian::encode_normal(merian::normalize(vert[k] - centroid));
-            vertices.push_back(pv);
-            prev_positions.push_back(prev_vert[k]);
-        }
+        const float depth = merian::dot(center - eye, merian::as_float3(vpn));
+        const float radius =
+            size * QUAKESPASM_PARTICLE_RADIUS * (depth < 20.f ? 1.08f : 1.f + depth * 0.004f);
 
-        indices.push_back(merian::uint3(base + 0, base + 1, base + 2));
-        indices.push_back(merian::uint3(base + 0, base + 2, base + 3));
-        indices.push_back(merian::uint3(base + 0, base + 3, base + 1));
-        indices.push_back(merian::uint3(base + 1, base + 3, base + 2));
+        const merian::float3 to_eye = eye - center;
+        const merian::float3 facing =
+            merian::length(to_eye) > 1e-3f ? merian::normalize(to_eye) : -merian::as_float3(vpn);
+        const merian::float3 right = merian::normalize(
+            merian::cross(std::abs(facing.z) < 0.999f ? merian::float3(0.f, 0.f, 1.f)
+                                                      : merian::float3(1.f, 0.f, 0.f),
+                          facing));
+        const merian::float3 up = merian::cross(facing, right);
+        const merian::float3 planes[3][2] = {{right, up}, {facing, up}, {facing, right}};
+
+        const uint32_t color = static_cast<uint32_t>(static_cast<int>(p->color) & 0xff);
+        for (const auto& [u, v] : planes) {
+            const uint32_t encoded_normal = merian::encode_normal(merian::cross(u, v));
+            const uint32_t base = static_cast<uint32_t>(vertices.size());
+            for (const merian::float2& corner : corners) {
+                const merian::float3 offset = radius * (corner.x * u + corner.y * v);
+                merian::PackedVertexData pv{};
+                pv.position = center + offset;
+                pv.uv = merian::half2(particle_uv(color, corner));
+                pv.encoded_normal = encoded_normal;
+                vertices.push_back(pv);
+                prev_positions.push_back(prev_center + offset);
+            }
+            indices.push_back(merian::uint3(base + 0, base + 1, base + 2));
+            indices.push_back(merian::uint3(base + 0, base + 2, base + 3));
+        }
     }
 }
 

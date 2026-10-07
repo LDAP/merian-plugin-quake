@@ -28,8 +28,8 @@ namespace merian_quake {
 
 // Texture-manager capacity; must match MAX_GLTEXTURES in quakespasm's gl_texmgr.c.
 constexpr uint32_t MAX_GLTEXTURES = 4096;
-constexpr auto PALETTE_TEXTURE = static_cast<merian::TextureID>(MAX_GLTEXTURES);
-constexpr auto FULLBRIGHT_PALETTE_TEXTURE = static_cast<merian::TextureID>(MAX_GLTEXTURES + 1);
+constexpr auto PARTICLE_TEXTURE = static_cast<merian::TextureID>(MAX_GLTEXTURES);
+constexpr auto FULLBRIGHT_PARTICLE_TEXTURE = static_cast<merian::TextureID>(MAX_GLTEXTURES + 1);
 constexpr auto LIGHT_ENTITY_RADIANCE_TEXTURE = static_cast<merian::TextureID>(MAX_GLTEXTURES + 2);
 constexpr auto LIGHT_ENTITY_SPOT_TEXTURE = static_cast<merian::TextureID>(MAX_GLTEXTURES + 3);
 constexpr uint32_t TEXTURE_CAPACITY = MAX_GLTEXTURES + 4;
@@ -138,6 +138,7 @@ class QuakeScene : public merian::Scene {
     void update_sprite_entity(entity_t* ent);
     void update_particles();
     void update_animated_materials();
+    void update_sprite_materials();
     void update_material_constants();
     uint16_t quantized_fixture_emission(float radiance) const;
     uint16_t model_fixture_emission(const entity_t* ent, aliashdr_t* hdr, int skin);
@@ -246,26 +247,30 @@ class QuakeScene : public merian::Scene {
 
     struct Emission {
         float fullbright_scale = 12.79F;
-        float fullbright_gamma = 0.4548F;
-        float fullbright_exponent = 0.03F;
-        float fullbright_max_level = 0.9639F;
-        float fullbright_red = -0.2786F;
-        float fullbright_yellow = 1.078F;
-        float fullbright_blue = 2.198F;
-        float fixture = 26.88F;
-        float waterfall = 18.98F;
+        float fullbright_gamma = 0.4351F;
+        float fullbright_exponent = 0.03384F;
+        float fullbright_max_level = 0.9484F;
+        float fullbright_red = -0.02604F;
+        float fullbright_yellow = 1.147F;
+        float fullbright_blue = 2.136F;
+        float fullbright_fallback = 1.558F;
+        float alias_model = 40.F;
+        float fixture = 36.32F;
+        float waterfall = 23.37F;
+        float sprite = 50.F;
+        float particle = 50.F;
         float classic_sky_exp_scale = 0.F;
         float classic_sky_exp_rate = 3.5F;
-        float classic_sky_pow_scale = 18.58F;
-        float classic_sky_pow_gamma = 1.392F;
+        float classic_sky_pow_scale = 30.78F;
+        float classic_sky_pow_gamma = 1.33F;
         float cube_sky_exp_scale = 0.F;
         float cube_sky_exp_rate = 3.5F;
-        float cube_sky_pow_scale = 9.816F;
-        float cube_sky_pow_gamma = 1.558F;
-        float sun_lobe = 1136.F;
-        float sun_disc = 200.F;
+        float cube_sky_pow_scale = 11.98F;
+        float cube_sky_pow_gamma = 1.571F;
+        float sun_lobe = 1484.F;
+        float sun_disc = 270.F;
         float sun_kappa = 30000.F;
-        float switched_lights = 81.76F;
+        float switched_lights = 109.6F;
     };
     Emission emission;
 
@@ -306,6 +311,8 @@ class QuakeScene : public merian::Scene {
         material_id_for_alias_skin;
     std::unordered_map<merian::MaterialID, int> alias_material_frames;
     std::unordered_map<AliasSkinKey, float, AliasSkinKeyHash> alias_projected_areas;
+    QuakeMaterial
+    alias_material(aliashdr_t* hdr, int skin, int anim_frame, uint16_t fixture_emission) const;
 
     struct SpriteFrameKey {
         mspriteframe_t* frame;
@@ -324,6 +331,8 @@ class QuakeScene : public merian::Scene {
     };
     std::unordered_map<SpriteFrameKey, SpriteFrameInfo, SpriteFrameKeyHash> sprite_frame_info;
     std::unordered_map<mspriteframe_t*, float> sprite_projected_areas;
+    QuakeMaterial sprite_material(mspriteframe_t* frame) const;
+    QuakeMaterial particle_material() const;
     SpriteFrameInfo
     add_sprite_frame(const std::string& name, mspriteframe_t* frame, const QuakeMaterial& material);
 
@@ -372,7 +381,8 @@ class QuakeScene : public merian::Scene {
     merian::Scene::NodeID particle_node_id = merian::Scene::NODE_ID_INVALID;
     merian::MaterialID particle_material_id = 0;
     bool particle_instance_attached = false;
-    double prev_cl_time = 0.0;
+    float particle_size = 3.F;
+    float particle_opacity = 1.F;
 
     // Input.
     merian::InputControllerHandle controller = std::make_shared<merian::DummyInputController>();
@@ -402,7 +412,6 @@ class QuakeScene : public merian::Scene {
     merian::float3 mu_s_div_mu_t{1};
     float fog_particle_size_um = 7.0F;
     float fog_density_factor = 0.5F;
-    bool reproducible_renders = false;
     bool enable_transparency = false;
 
     merian::Scene::CameraID quake_camera;
