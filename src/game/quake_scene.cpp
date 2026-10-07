@@ -813,26 +813,29 @@ bool is_glass(const texture_t* tex) {
            strstr(name, "window") != nullptr;
 }
 
+bool is_liquid(const int surf_flags) {
+    return (surf_flags & (MAT_TYPE_WATER | MAT_TYPE_SLIME)) != 0;
+}
+
 float brush_opacity(const entity_t* ent, const texture_t* tex, const int surf_flags) {
-    const bool liquid = (surf_flags & (SURF_DRAWWATER | SURF_DRAWSLIME)) != 0 || is_waterfall(tex);
-    float opacity = 1.F;
-    if (ent != nullptr && ent->alpha != ENTALPHA_DEFAULT)
-        opacity = ENTALPHA_DECODE(ent->alpha);
-    else if ((surf_flags & SURF_DRAWSLIME) != 0)
-        opacity = map_slimealpha > 0 ? map_slimealpha : map_wateralpha;
-    else if (liquid)
-        opacity = map_wateralpha;
+    const int blend_flags = is_waterfall(tex) ? SURF_DRAWWATER : surf_flags;
+    float opacity = ent != nullptr ? ENTALPHA_DECODE(ent->alpha) : 1.F;
+    if ((blend_flags & MAT_TYPE_WARP) != 0) {
+        msurface_t surf{};
+        surf.flags = blend_flags;
+        opacity = GL_WaterAlphaForEntitySurface(const_cast<entity_t*>(ent), &surf);
+    }
     if (opacity >= 1.F)
         return opacity;
     if (is_fog(tex))
         return std::min(opacity * FOG_OPACITY_SCALE, 1.F);
     if (is_waterfall(tex))
         return opacity * TRANSLUCENT_LIQUID_OPACITY_SCALE * WATERFALL_OPACITY_SCALE;
-    return liquid ? opacity * TRANSLUCENT_LIQUID_OPACITY_SCALE : opacity;
+    return is_liquid(blend_flags) ? opacity * TRANSLUCENT_LIQUID_OPACITY_SCALE : opacity;
 }
 
 uint8_t brush_pane(const texture_t* tex, const int surf_flags) {
-    if ((surf_flags & MAT_TYPE_WARP) != 0)
+    if (is_liquid(surf_flags))
         return is_waterfall(tex) || is_fog(tex) ? PANE_NONE : PANE_LIQUID;
     return is_glass(tex) ? PANE_GLASS : PANE_NONE;
 }
