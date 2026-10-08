@@ -453,6 +453,10 @@ void QuakeScene::register_input_listener(const merian::InputControllerHandle& co
         QuakeScene* scene;
         explicit QuakeInputListener(QuakeScene* s) : scene(s) {}
 
+        void push_key(const int key, const bool down) {
+            scene->pending_input.push_back({InputEvent::Type::KEY, key, down});
+        }
+
         bool on_key(merian::InputController& /*c*/,
                     merian::InputController::Key key,
                     merian::InputController::KeyStatus action,
@@ -530,9 +534,9 @@ void QuakeScene::register_input_listener(const merian::InputControllerHandle& co
                 return true;
             using KS = merian::InputController::KeyStatus;
             if (action == KS::PRESS)
-                Key_Event(qkey, true);
+                push_key(qkey, true);
             else if (action == KS::RELEASE)
-                Key_Event(qkey, false);
+                push_key(qkey, false);
             return true;
         }
 
@@ -558,25 +562,26 @@ void QuakeScene::register_input_listener(const merian::InputControllerHandle& co
             if (button == MB::UNKNOWN)
                 return true;
             const int remap[] = {K_MOUSE1, K_MOUSE2, K_MOUSE3, K_MOUSE4, K_MOUSE5};
-            Key_Event(remap[static_cast<int>(button)], status == KS::PRESS);
+            push_key(remap[static_cast<int>(button)], status == KS::PRESS);
             return true;
         }
 
         bool
         on_scroll(merian::InputController& /*c*/, double /*xoffset*/, double yoffset) override {
             if (yoffset > 0) {
-                Key_Event(K_MWHEELUP, true);
-                Key_Event(K_MWHEELUP, false);
+                push_key(K_MWHEELUP, true);
+                push_key(K_MWHEELUP, false);
             } else if (yoffset < 0) {
-                Key_Event(K_MWHEELDOWN, true);
-                Key_Event(K_MWHEELDOWN, false);
+                push_key(K_MWHEELDOWN, true);
+                push_key(K_MWHEELDOWN, false);
             }
             return true;
         }
 
         bool on_char(merian::InputController& /*c*/, unsigned int codepoint) override {
             if (codepoint >= 32 && codepoint < 127)
-                Char_Event(static_cast<int>(codepoint));
+                scene->pending_input.push_back(
+                    {InputEvent::Type::CHAR, static_cast<int>(codepoint), true});
             return true;
         }
     };
@@ -743,9 +748,12 @@ void QuakeScene::on_update(const merian::CommandBufferHandle& cmd,
         quakespasm_initialized = true;
     }
 
-    if (!update_gamestate)
+    if (!update_gamestate) {
+        pending_input.clear();
         return;
+    }
 
+    active_cmd = cmd;
     {
         std::lock_guard<std::mutex> lock(pending_commands_mutex);
         while (!pending_commands.empty()) {
@@ -753,8 +761,14 @@ void QuakeScene::on_update(const merian::CommandBufferHandle& cmd,
             pending_commands.pop();
         }
     }
+    for (const InputEvent& event : pending_input) {
+        if (event.type == InputEvent::Type::KEY)
+            Key_Event(event.value, event.down);
+        else
+            Char_Event(event.value);
+    }
+    pending_input.clear();
 
-    active_cmd = cmd;
     last_scene_rendered = false;
     // SCR_UpdateScreen may be skipped (vid_hidden, throttle) — clear so a
     // skipped frame doesn't leak draws into the next.

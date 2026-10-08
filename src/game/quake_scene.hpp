@@ -19,6 +19,7 @@
 #include <queue>
 #include <string>
 #include <thread>
+#include <vector>
 
 extern "C" {
 #include "quakedef.h"
@@ -394,6 +395,14 @@ class QuakeScene : public merian::Scene {
     double mouse_x = 0;
     double mouse_y = 0;
     bool raw_mouse_was_enabled = false;
+
+    struct InputEvent {
+        enum class Type { KEY, CHAR };
+        Type type;
+        int value;
+        bool down;
+    };
+    std::vector<InputEvent> pending_input;
 
     // Queued from graph/UI thread, drained by the game thread.
     std::queue<std::string> pending_commands;
