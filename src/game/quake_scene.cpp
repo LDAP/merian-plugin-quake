@@ -962,18 +962,23 @@ QuakeMaterial make_light_entity_material(const uint8_t light_style) {
 }
 
 // Quake world transform: yaw is flipped relative to the engine convention.
-merian::float4x4 entity_transform(entity_t* ent) {
-    std::array<float, 3> a = {-ent->angles[0], ent->angles[1], ent->angles[2]};
+merian::float4x4 rotate_for_entity(const float* origin, const float* angles, const uint8_t scale) {
+    std::array<float, 3> a = {-angles[0], angles[1], angles[2]};
     merian::float4x4 m = merian::identity();
     AngleVectors(a.data(), &m[0].x, &m[1].x, &m[2].x);
     m[1] *= -1;
-    m[3] = merian::float4(ent->origin[0], ent->origin[1], ent->origin[2], 1.f);
-    return merian::transpose(m);
+    m[3] = merian::float4(origin[0], origin[1], origin[2], 1.f);
+    return merian::mul(merian::transpose(m), merian::scale(merian::float3(ENTSCALE_DECODE(scale))));
+}
+
+merian::float4x4 entity_transform(entity_t* ent) {
+    return rotate_for_entity(ent->origin, ent->angles, ent->scale);
 }
 
 // fov_scaled stretches the model's Y/Z for the viewent gun at wide FOVs.
 merian::float4x4 alias_transform(const float* origin,
                                  const float* angles,
+                                 const uint8_t scale,
                                  const bool fov_scaled,
                                  const merian::float3& hdr_scale,
                                  const merian::float3& hdr_scale_origin) {
@@ -985,13 +990,7 @@ merian::float4x4 alias_transform(const float* origin,
     }
     const merian::float4x4 scale_col = merian::mul(merian::translation(hdr_scale_origin * fovscale),
                                                    merian::scale(hdr_scale * fovscale));
-
-    std::array<float, 3> a = {-angles[0], angles[1], angles[2]};
-    merian::float4x4 rt = merian::identity();
-    AngleVectors(a.data(), &rt[0].x, &rt[1].x, &rt[2].x);
-    rt[1] *= -1;
-    rt[3] = merian::float4(origin[0], origin[1], origin[2], 1.f);
-    return merian::mul(merian::transpose(rt), scale_col);
+    return merian::mul(rotate_for_entity(origin, angles, scale), scale_col);
 }
 
 std::optional<merian::float4x4> sprite_node_transform(entity_t* ent) {
@@ -1560,9 +1559,10 @@ void QuakeScene::update_alias_entity(entity_t* ent,
         (VectorCompare(lerpdata.angles, slot->cached_angles) == 0)) {
         const bool fov_scaled =
             ent == &cl.viewent && scr_fov.value > 90.f && cl_gun_fovscale.value != 0.f;
-        update_node(slot->node_id, alias_transform(lerpdata.origin, lerpdata.angles, fov_scaled,
-                                                   merian::as_float3(hdr->scale),
-                                                   merian::as_float3(hdr->scale_origin)));
+        update_node(slot->node_id,
+                    alias_transform(lerpdata.origin, lerpdata.angles, ent->scale, fov_scaled,
+                                    merian::as_float3(hdr->scale),
+                                    merian::as_float3(hdr->scale_origin)));
         VectorCopy(lerpdata.origin, slot->cached_origin);
         VectorCopy(lerpdata.angles, slot->cached_angles);
     }
