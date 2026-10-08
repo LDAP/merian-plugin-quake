@@ -1555,17 +1555,12 @@ void QuakeScene::update_alias_entity(entity_t* ent,
         mesh.vertices_dirty = true;
     }
 
-    if ((VectorCompare(lerpdata.origin, slot->cached_origin) == 0) ||
-        (VectorCompare(lerpdata.angles, slot->cached_angles) == 0)) {
-        const bool fov_scaled =
-            ent == &cl.viewent && scr_fov.value > 90.f && cl_gun_fovscale.value != 0.f;
-        update_node(slot->node_id,
-                    alias_transform(lerpdata.origin, lerpdata.angles, ent->scale, fov_scaled,
-                                    merian::as_float3(hdr->scale),
-                                    merian::as_float3(hdr->scale_origin)));
-        VectorCopy(lerpdata.origin, slot->cached_origin);
-        VectorCopy(lerpdata.angles, slot->cached_angles);
-    }
+    const bool fov_scaled =
+        ent == &cl.viewent && scr_fov.value > 90.f && cl_gun_fovscale.value != 0.f;
+    update_node(slot->node_id,
+                alias_transform(lerpdata.origin, lerpdata.angles, ent->scale, fov_scaled,
+                                merian::as_float3(hdr->scale),
+                                merian::as_float3(hdr->scale_origin)));
 }
 
 void QuakeScene::update_brush_entity(entity_t* ent,

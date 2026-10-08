@@ -360,8 +360,6 @@ class QuakeScene : public merian::Scene {
         int cached_prev_pose1 = -1;
         int cached_prev_pose2 = -1;
         float cached_prev_blend = -1.f;
-        vec3_t cached_origin = {};
-        vec3_t cached_angles = {};
     };
     std::unordered_map<entity_t*, EntityMeshSlot> entity_slots;
     // Holds last frame's slots until each surviving entity migrates back; what
