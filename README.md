@@ -52,9 +52,11 @@ Everything after the graph that is not an option below is the Quake command line
 - `--denoiser <svgf|dlss>`: the denoiser (default `svgf`).
 - `--volume <off|on>`: traces the fog.
 - `--max-path-length <n>`, `--spp <n>`: path-traced renderers.
-- `--quality <ultra_fast|fast|default|quality>`, only with `--denoiser dlss`:
-    - `quality`: resampled next event estimation.
-    - `fast`: traces at 3/4 resolution and lets DLSS upscale.
+- `--quality <ultra_fast|fast|default|quality|ultra_quality>`, only with `--denoiser dlss`:
+    - `ultra_quality`: resampled next event estimation at full resolution.
+    - `quality`: traces at full resolution.
+    - `default`: traces at 3/4 resolution and lets DLSS upscale.
+    - `fast`: like `default`, with 1 sample per pixel for surfaces.
     - `ultra_fast`: traces at 1/2 resolution with 1 sample per pixel and 1 diffuse bounce, and ends
       paths in the irradiance cache (not available with `--renderer pt`).
 

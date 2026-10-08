@@ -72,7 +72,7 @@ def render(name, game, bsp, start, end, frames, args):
     with open(capture_file, 'w') as f:
         json.dump(capture, f)
     command = ['meson', 'devenv', '-C', build, 'merian-graph-run', os.path.join(plugin, 'quake.json'),
-               '--denoiser', 'dlss', *args, '--quality', 'quality', '--merge', capture_file, f'--max-iterations={95 + HOLD + frames}',
+               '--denoiser', 'dlss', *args, '--quality', 'ultra_quality', '--merge', capture_file, f'--max-iterations={95 + HOLD + frames}',
                f'--time-delta={1000 / FPS:.4f}', '-nosound', '-basedir', quake_dir, '-game', game,
                '+map', bsp, '+exec', 'demo_video.cfg']
     with open(os.path.join(directory, 'run.log'), 'w') as log:

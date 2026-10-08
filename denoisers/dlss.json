@@ -18,23 +18,29 @@
             "default": "default",
             "type": "variant",
             "variants": {
-                "default": {},
-                "fast": {
+                "default": {
                     "set": {
                         "/nodes/gbuffer/properties/resolution scale": "3/4"
                     }
                 },
-                "quality": {
+                "fast": {
                     "set": {
-                        "/nodes/render/properties/surface/nee sampling": "resampled (RIS)"
+                        "/nodes/gbuffer/properties/resolution scale": "3/4",
+                        "/nodes/render/properties/surface/samples per pixel": 1
                     }
                 },
+                "quality": {},
                 "ultra_fast": {
                     "set": {
                         "/nodes/gbuffer/properties/resolution scale": "1/2",
                         "/nodes/render/properties/surface/cache tail": true,
                         "/nodes/render/properties/surface/max diffuse bounces": 1,
                         "/nodes/render/properties/surface/samples per pixel": 1
+                    }
+                },
+                "ultra_quality": {
+                    "set": {
+                        "/nodes/render/properties/surface/nee sampling": "resampled (RIS)"
                     }
                 }
             }
