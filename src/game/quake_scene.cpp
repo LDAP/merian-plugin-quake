@@ -1473,21 +1473,6 @@ void QuakeScene::update_alias_entity(entity_t* ent,
     EntityMeshSlot* slot = migrate_entity_slot(ent);
     if (slot == nullptr) {
         const AliasModelInfo& info = info_it->second;
-        const auto& alloc = get_allocator();
-        const vk::DeviceSize vb_size = info.vertex_count * sizeof(merian::PackedVertexData);
-        const vk::DeviceSize prev_vb_size =
-            info.vertex_count * sizeof(merian::PackedPrevVertexData);
-        const auto staging_usage = vk::BufferUsageFlagBits::eTransferSrc |
-                                   vk::BufferUsageFlagBits::eStorageBuffer |
-                                   vk::BufferUsageFlagBits::eShaderDeviceAddress;
-
-        auto vb = alloc->create_buffer(vb_size, staging_usage,
-                                       merian::MemoryMappingType::HOST_ACCESS_SEQUENTIAL_WRITE,
-                                       fmt::format("alias_vb:{}", ent->model->name));
-        auto prev_vb = alloc->create_buffer(prev_vb_size, staging_usage,
-                                            merian::MemoryMappingType::HOST_ACCESS_SEQUENTIAL_WRITE,
-                                            fmt::format("alias_prev_vb:{}", ent->model->name));
-
         const int skin = std::clamp(ent->skinnum, 0, info.numskins - 1);
         const uint16_t fixture_emission = model_fixture_emission(ent, hdr, skin);
         const merian::MaterialID material_id =
@@ -1503,11 +1488,8 @@ void QuakeScene::update_alias_entity(entity_t* ent,
         mesh->material_id = material_id;
         mesh->flags = merian::Scene::MeshFlags::IsMorphed | merian::Scene::MeshFlags::FlipFacing;
         mesh->instance_mask = instance_mask;
-        mesh->vb_staging = std::move(vb);
-        mesh->prev_vb_staging = std::move(prev_vb);
-        mesh->vb_mapped = mesh->vb_staging->get_memory()->map_as<merian::PackedVertexData>();
-        mesh->prev_vb_mapped =
-            mesh->prev_vb_staging->get_memory()->map_as<merian::PackedPrevVertexData>();
+        mesh->vertices.resize(info.vertex_count);
+        mesh->prev_vertices.resize(info.vertex_count);
         mesh->ib_shared = info.index_buffer;
         mesh->vertex_count = info.vertex_count;
         mesh->primitive_count = info.primitive_count;
@@ -1564,7 +1546,7 @@ void QuakeScene::update_alias_entity(entity_t* ent,
     if (pose_changed) {
         lerp_alias_vertices(hdr, info_it->second.baked_normals.data(), lerpdata.pose1,
                             lerpdata.pose2, lerpdata.blend, prev_pose1, prev_pose2, prev_blend,
-                            mesh.vb_mapped, mesh.prev_vb_mapped);
+                            mesh.vertices.data(), mesh.prev_vertices.data());
         slot->cached_pose1 = lerpdata.pose1;
         slot->cached_pose2 = lerpdata.pose2;
         slot->cached_blend = lerpdata.blend;

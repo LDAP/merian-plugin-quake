@@ -89,28 +89,16 @@ class QuakeHostDynamicMesh : public merian::Scene::Mesh {
     }
 };
 
-// Per-entity alias mesh. Persistently mapped staging buffers receive lerped
-// object-space vertices; Scene copies them device-local.
 class AliasInstanceMesh : public merian::Scene::Mesh {
   public:
-    merian::BufferHandle vb_staging;
-    merian::BufferHandle prev_vb_staging;
+    std::vector<merian::PackedVertexData> vertices;
+    std::vector<merian::PackedPrevVertexData> prev_vertices;
     merian::BufferHandle ib_shared; // borrowed from AliasModelInfo
     uint32_t vertex_count = 0;
     uint32_t primitive_count = 0;
 
-    merian::PackedVertexData* vb_mapped = nullptr;
-    merian::PackedPrevVertexData* prev_vb_mapped = nullptr;
-
     AliasInstanceMesh() {
         index_type = vk::IndexType::eUint16; // mdl indices are int16
-    }
-
-    ~AliasInstanceMesh() override {
-        if (vb_staging)
-            vb_staging->get_memory()->unmap();
-        if (prev_vb_staging)
-            prev_vb_staging->get_memory()->unmap();
     }
 
     uint32_t get_vertex_count() const override {
@@ -121,12 +109,12 @@ class AliasInstanceMesh : public merian::Scene::Mesh {
     }
 
     MeshVertexData get_vertices() const override {
-        return DeviceStaged{vb_staging};
+        return HostPacked<merian::PackedVertexData>{vertices.data()};
     }
     MeshPrevVertexData get_prev_vertices() const override {
-        if (!prev_vb_staging)
+        if (prev_vertices.empty())
             return std::monostate{};
-        return DeviceStaged{prev_vb_staging};
+        return HostPacked<merian::PackedPrevVertexData>{prev_vertices.data()};
     }
     MeshIndexData get_indices() const override {
         return DeviceLocal{ib_shared};
