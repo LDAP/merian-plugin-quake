@@ -14,7 +14,9 @@ namespace merian_quake {
 // Smooth per-pose normals indexed by (pose * hdr->numverts + vertindex).
 std::vector<merian::float3> bake_alias_pose_normals(aliashdr_t* hdr);
 
-// Lerp alias vertices in raw byte-coord space; scale/scale_origin live on the
+void write_alias_uvs(const aliashdr_t* hdr, merian::PackedVertexData* vertices_dst);
+
+// Lerp alias positions and normals in raw byte-coord space; scale/scale_origin live on the
 // SceneNode transform. Output buffers must hold hdr->numverts_vbo entries.
 void lerp_alias_vertices(aliashdr_t* hdr,
                          const merian::float3* baked_normals,
@@ -39,7 +41,7 @@ constexpr uint32_t PARTICLE_ATLAS_SIZE = 256;
 std::vector<uint32_t> particle_atlas(const uint32_t* palette);
 
 void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
-                          std::vector<merian::float3>& prev_positions,
+                          std::vector<merian::PackedPrevVertexData>& prev_vertices,
                           std::vector<merian::uint3>& indices,
                           float size);
 

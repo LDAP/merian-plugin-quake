@@ -343,6 +343,7 @@ class QuakeScene : public merian::Scene {
         merian::SmallVector<merian::Scene::MeshID, 1> mesh_ids;
         // Opaque identity for migration — never dereferenced (may dangle after Mod_ResetAll).
         qmodel_t* model = nullptr;
+        uint8_t instance_mask = 0;
         bool owns_meshes = true;
 
         // Empty for non-brush slots.
@@ -369,7 +370,7 @@ class QuakeScene : public merian::Scene {
     std::unordered_map<entity_t*, EntityMeshSlot> previous_entity_slots;
 
     // Returns nullptr if the previous-frame slot is unusable (caller builds fresh).
-    EntityMeshSlot* migrate_entity_slot(entity_t* ent);
+    EntityMeshSlot* migrate_entity_slot(entity_t* ent, uint8_t instance_mask);
     void release_unused_entities();
     void destroy_slot(EntityMeshSlot& slot);
 

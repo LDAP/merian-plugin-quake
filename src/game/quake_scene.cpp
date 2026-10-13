@@ -1442,12 +1442,13 @@ void QuakeScene::destroy_slot(EntityMeshSlot& slot) {
         remove_node(slot.node_id);
 }
 
-QuakeScene::EntityMeshSlot* QuakeScene::migrate_entity_slot(entity_t* ent) {
+QuakeScene::EntityMeshSlot* QuakeScene::migrate_entity_slot(entity_t* ent,
+                                                            const uint8_t instance_mask) {
     auto node = previous_entity_slots.extract(ent);
     if (node.empty())
         return nullptr;
     // Same model pointer implies same type — the model identifies the kind.
-    if (node.mapped().model != ent->model) {
+    if (node.mapped().model != ent->model || node.mapped().instance_mask != instance_mask) {
         destroy_slot(node.mapped());
         return nullptr;
     }
@@ -1469,7 +1470,7 @@ void QuakeScene::update_alias_entity(entity_t* ent,
         return;
     auto* hdr = static_cast<aliashdr_t*>(Mod_Extradata(ent->model));
 
-    EntityMeshSlot* slot = migrate_entity_slot(ent);
+    EntityMeshSlot* slot = migrate_entity_slot(ent, instance_mask);
     if (slot == nullptr) {
         const AliasModelInfo& info = info_it->second;
         const int skin = std::clamp(ent->skinnum, 0, info.numskins - 1);
@@ -1489,6 +1490,7 @@ void QuakeScene::update_alias_entity(entity_t* ent,
         mesh->instance_mask = instance_mask;
         mesh->vertices.resize(info.vertex_count);
         mesh->prev_vertices.resize(info.vertex_count);
+        write_alias_uvs(hdr, mesh->vertices.data());
         mesh->ib_shared = info.index_buffer;
         mesh->vertex_count = info.vertex_count;
         mesh->primitive_count = info.primitive_count;
@@ -1500,6 +1502,7 @@ void QuakeScene::update_alias_entity(entity_t* ent,
         fresh.node_id = node_id;
         fresh.mesh_ids = {mesh_id};
         fresh.model = ent->model;
+        fresh.instance_mask = instance_mask;
         fresh.fixture_emission = fixture_emission;
         auto [it, _] = entity_slots.emplace(ent, std::move(fresh));
         slot = &it->second;
@@ -1596,7 +1599,7 @@ void QuakeScene::update_brush_entity(entity_t* ent,
     if (geo_it->second.empty())
         return;
 
-    EntityMeshSlot* slot = migrate_entity_slot(ent);
+    EntityMeshSlot* slot = migrate_entity_slot(ent, instance_mask);
     if (slot == nullptr) {
         merian::Scene::Node node;
         node.name = fmt::format("brush:{}", ent->model->name);
@@ -1606,6 +1609,7 @@ void QuakeScene::update_brush_entity(entity_t* ent,
         EntityMeshSlot fresh;
         fresh.node_id = node_id;
         fresh.model = ent->model;
+        fresh.instance_mask = instance_mask;
 
         const auto& material_system = get_material_system();
         for (const auto& part : geo_it->second) {
@@ -1660,7 +1664,7 @@ void QuakeScene::update_sprite_entity(entity_t* ent) {
     if (!sprite_frame_info.contains({frame, 0}))
         return;
 
-    EntityMeshSlot* slot = migrate_entity_slot(ent);
+    EntityMeshSlot* slot = migrate_entity_slot(ent, to_mask(InstanceMask::SPRITE));
     if (slot == nullptr) {
         const uint16_t emission = sprite_fixture_emission(ent, frame);
         const merian::Scene::MeshID mesh_id = ensure_sprite_frame(ent->model, frame, emission);
@@ -1674,6 +1678,7 @@ void QuakeScene::update_sprite_entity(entity_t* ent) {
         fresh.node_id = node_id;
         fresh.mesh_ids = {mesh_id};
         fresh.model = ent->model;
+        fresh.instance_mask = to_mask(InstanceMask::SPRITE);
         fresh.owns_meshes = false;
         fresh.fixture_emission = emission;
         fresh.cached_sprite_frame = frame;
@@ -1706,7 +1711,7 @@ void QuakeScene::update_entities(const merian::CommandBufferHandle& cmd) {
     // mask_override != 0 forces a specific bit (viewent / player body);
     // otherwise the bit is derived from ent->model->type.
     const auto visit = [&](entity_t* ent, uint8_t mask_override) {
-        if (ent == nullptr || ent->model == nullptr)
+        if (ent == nullptr || ent->model == nullptr || entity_slots.contains(ent))
             return;
         switch (ent->model->type) {
         case mod_alias:
@@ -1728,10 +1733,11 @@ void QuakeScene::update_entities(const merian::CommandBufferHandle& cmd) {
 
     // gbuffer toggles between viewent (gun) and player body via the trace mask.
     visit(&cl.viewent, to_mask(InstanceMask::VIEWENT));
-    if (cl.viewentity > 0 && cl.viewentity < cl_max_edicts && cl_entities != nullptr)
-        visit(&cl_entities[cl.viewentity], to_mask(InstanceMask::PLAYER_BODY));
+    // before the player body: in chase view the player is visible and keeps the entity mask
     for (int i = 0; i < cl_numvisedicts; i++)
         visit(cl_visedicts[i], 0);
+    if (cl.viewentity > 0 && cl.viewentity < cl_max_edicts && cl_entities != nullptr)
+        visit(&cl_entities[cl.viewentity], to_mask(InstanceMask::PLAYER_BODY));
     for (int i = 0; i < cl.num_statics; i++)
         visit(&cl_static_entities[i], 0);
 
@@ -1743,16 +1749,8 @@ void QuakeScene::update_entities(const merian::CommandBufferHandle& cmd) {
 
 void QuakeScene::update_particles() {
     auto& mesh = static_cast<QuakeHostDynamicMesh&>(*get_mesh_infos()[particle_mesh_id].mesh);
-    mesh.vertices.clear();
-    mesh.prev_vertices.clear();
-    mesh.indices.clear();
-
-    std::vector<merian::float3> prev_pos;
-    extract_particle_geo(mesh.vertices, prev_pos, mesh.indices, particle_size);
-
-    mesh.prev_vertices.resize(prev_pos.size());
-    for (size_t i = 0; i < prev_pos.size(); i++)
-        mesh.prev_vertices[i].position = prev_pos[i];
+    const size_t previous_index_count = mesh.indices.size();
+    extract_particle_geo(mesh.vertices, mesh.prev_vertices, mesh.indices, particle_size);
 
     // Scene can't upload empty meshes — detach the instance so it's skipped.
     const bool has_particles = !mesh.vertices.empty();
@@ -1765,7 +1763,7 @@ void QuakeScene::update_particles() {
     }
     if (has_particles) {
         mesh.vertices_dirty = true;
-        mesh.indices_dirty = true;
+        mesh.indices_dirty |= mesh.indices.size() != previous_index_count;
     }
 }
 

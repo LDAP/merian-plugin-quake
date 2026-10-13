@@ -4,6 +4,8 @@
 #include "merian/utils/vector_matrix.hpp"
 #include "merian/utils/xorshift.hpp"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 
 extern "C" {
@@ -151,15 +153,42 @@ std::vector<uint32_t> particle_atlas(const uint32_t* palette) {
 }
 
 void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
-                          std::vector<merian::float3>& prev_positions,
+                          std::vector<merian::PackedPrevVertexData>& prev_vertices,
                           std::vector<merian::uint3>& indices,
                           const float size) {
-    static const merian::float2 corners[4] = {{-1.f, -1.f}, {1.f, -1.f}, {1.f, 1.f}, {-1.f, 1.f}};
+    static constexpr merian::float2 corners[4] = {
+        {-1.f, -1.f}, {1.f, -1.f}, {1.f, 1.f}, {-1.f, 1.f}};
+    static const std::array<std::array<merian::half2, 4>, 256> corner_uvs = [] {
+        std::array<std::array<merian::half2, 4>, 256> uvs;
+        for (uint32_t color = 0; color < uvs.size(); color++)
+            for (uint32_t corner = 0; corner < 4; corner++)
+                uvs[color][corner] = merian::half2(particle_uv(color, corners[corner]));
+        return uvs;
+    }();
+    constexpr uint32_t PLANES_PER_PARTICLE = 3;
+
+    uint32_t particle_count = 0;
+    for (const particle_t* p = active_particles; p != nullptr; p = p->next)
+        particle_count++;
+    const size_t plane_count = static_cast<size_t>(particle_count) * PLANES_PER_PARTICLE;
+    vertices.resize(plane_count * 4);
+    prev_vertices.resize(plane_count * 4);
+
+    const size_t first_new_plane = std::min(indices.size() / 2, plane_count);
+    indices.resize(plane_count * 2);
+    for (size_t plane = first_new_plane; plane < plane_count; plane++) {
+        const uint32_t base = static_cast<uint32_t>(plane * 4);
+        indices[2 * plane] = merian::uint3(base, base + 1, base + 2);
+        indices[2 * plane + 1] = merian::uint3(base, base + 2, base + 3);
+    }
 
     vec3_t vpn, vright, vup;
     AngleVectors(r_refdef.viewangles, vpn, vright, vup);
     const merian::float3 eye = merian::as_float3(r_refdef.vieworg);
+    const merian::float3 view_dir = merian::as_float3(vpn);
 
+    merian::PackedVertexData* vertex = vertices.data();
+    merian::PackedPrevVertexData* prev_vertex = prev_vertices.data();
     for (particle_t* p = active_particles; p != nullptr; p = p->next) {
         merian::XORShift32 xrand{static_cast<uint32_t>(p - particles + 1) * 2654435761u};
         const float jitter = 2.f * (xrand.next_float() - 0.5f) + 2.f * (xrand.next_float() - 0.5f);
@@ -170,36 +199,49 @@ void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
         VectorCopy(p->org, p->mv_prev_origin);
         p->mv_prev_valid = true;
 
-        const float depth = merian::dot(center - eye, merian::as_float3(vpn));
+        const float depth = merian::dot(center - eye, view_dir);
         const float radius =
             size * QUAKESPASM_PARTICLE_RADIUS * (depth < 20.f ? 1.08f : 1.f + depth * 0.004f);
 
         const merian::float3 to_eye = eye - center;
-        const merian::float3 facing =
-            merian::length(to_eye) > 1e-3f ? merian::normalize(to_eye) : -merian::as_float3(vpn);
+        const float eye_distance = merian::length(to_eye);
+        const merian::float3 facing = eye_distance > 1e-3f ? to_eye / eye_distance : -view_dir;
         const merian::float3 right = merian::normalize(
             merian::cross(std::abs(facing.z) < 0.999f ? merian::float3(0.f, 0.f, 1.f)
                                                       : merian::float3(1.f, 0.f, 0.f),
                           facing));
         const merian::float3 up = merian::cross(facing, right);
-        const merian::float3 planes[3][2] = {{right, up}, {facing, up}, {facing, right}};
+        const merian::float3 planes[PLANES_PER_PARTICLE][3] = {
+            {right, up, facing}, {facing, up, -right}, {facing, right, up}};
 
-        const uint32_t color = static_cast<uint32_t>(static_cast<int>(p->color) & 0xff);
-        for (const auto& [u, v] : planes) {
-            const uint32_t encoded_normal = merian::encode_normal(merian::cross(u, v));
-            const uint32_t base = static_cast<uint32_t>(vertices.size());
-            for (const merian::float2& corner : corners) {
-                const merian::float3 offset = radius * (corner.x * u + corner.y * v);
-                merian::PackedVertexData pv{};
-                pv.position = center + offset;
-                pv.uv = merian::half2(particle_uv(color, corner));
-                pv.encoded_normal = encoded_normal;
-                vertices.push_back(pv);
-                prev_positions.push_back(prev_center + offset);
+        const auto& uvs = corner_uvs[static_cast<uint32_t>(static_cast<int>(p->color) & 0xff)];
+        for (const auto& [u, v, normal] : planes) {
+            const uint32_t encoded_normal = merian::encode_normal(normal);
+            const merian::float3 radius_u = radius * u;
+            const merian::float3 radius_v = radius * v;
+            for (uint32_t corner = 0; corner < 4; corner++) {
+                const merian::float3 offset =
+                    corners[corner].x * radius_u + corners[corner].y * radius_v;
+                vertex->position = center + offset;
+                vertex->encoded_normal = encoded_normal;
+                vertex->uv = uvs[corner];
+                vertex->encoded_tangent = 0;
+                prev_vertex->position = prev_center + offset;
+                vertex++;
+                prev_vertex++;
             }
-            indices.push_back(merian::uint3(base + 0, base + 1, base + 2));
-            indices.push_back(merian::uint3(base + 0, base + 2, base + 3));
         }
+    }
+}
+
+void write_alias_uvs(const aliashdr_t* hdr, merian::PackedVertexData* vertices_dst) {
+    const auto* desc =
+        reinterpret_cast<const aliasmesh_t*>(reinterpret_cast<const uint8_t*>(hdr) + hdr->meshdesc);
+    const float skin_w = static_cast<float>(hdr->skinwidth);
+    const float skin_h = static_cast<float>(hdr->skinheight);
+    for (int v = 0; v < hdr->numverts_vbo; v++) {
+        vertices_dst[v].uv =
+            merian::half2((desc[v].st[0] + 0.5f) / skin_w, (desc[v].st[1] + 0.5f) / skin_h);
     }
 }
 
@@ -216,8 +258,6 @@ void lerp_alias_vertices(aliashdr_t* hdr,
     const auto* desc = (aliasmesh_t*)((uint8_t*)hdr + hdr->meshdesc);
     const auto* trivertexes = (trivertx_t*)((uint8_t*)hdr + hdr->vertexes);
 
-    const float skin_w = static_cast<float>(hdr->skinwidth);
-    const float skin_h = static_cast<float>(hdr->skinheight);
     const merian::float3* normals_pose1 = baked_normals + hdr->numverts * pose1;
     const merian::float3* normals_pose2 = baked_normals + hdr->numverts * pose2;
 
@@ -230,11 +270,8 @@ void lerp_alias_vertices(aliashdr_t* hdr,
         const merian::float3 p2{float(tv2.v[0]), float(tv2.v[1]), float(tv2.v[2])};
 
         vertices_dst[v].position = merian::lerp(p1, p2, blend);
-        vertices_dst[v].encoded_normal = merian::encode_normal(
-            merian::normalize(merian::lerp(normals_pose1[vi], normals_pose2[vi], blend)));
-        vertices_dst[v].uv =
-            merian::half2((desc[v].st[0] + 0.5f) / skin_w, (desc[v].st[1] + 0.5f) / skin_h);
-        vertices_dst[v].encoded_tangent = 0;
+        vertices_dst[v].encoded_normal =
+            merian::encode_normal(merian::lerp(normals_pose1[vi], normals_pose2[vi], blend));
 
         const auto& ptv1 = trivertexes[hdr->numverts * prev_pose1 + vi];
         const auto& ptv2 = trivertexes[hdr->numverts * prev_pose2 + vi];
