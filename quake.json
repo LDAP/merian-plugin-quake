@@ -42,9 +42,10 @@
                         "/nodes/render/properties/surface/max glossy bounces": 2,
                         "/nodes/render/properties/surface/max path length": 5,
                         "/nodes/render/properties/surface/max transmission bounces": 2,
-                        "/nodes/render/properties/surface/nee sampling": "mixture (MIS)",
-                        "/nodes/render/properties/surface/shares/bsdf": 0.1,
-                        "/nodes/render/properties/surface/shares/guiding": 0.8,
+                        "/nodes/render/properties/surface/nee sampling": "resampled (RIS)",
+                        "/nodes/render/properties/surface/samples per pixel": 1,
+                        "/nodes/render/properties/surface/shares/bsdf": 0.25,
+                        "/nodes/render/properties/surface/shares/guiding": 0.75,
                         "/nodes/render/properties/surface/shares/nee": 0.1,
                         "/nodes/render/properties/volume/shares/guiding": 0.8,
                         "/nodes/render/properties/volume/shares/phase": 0.1

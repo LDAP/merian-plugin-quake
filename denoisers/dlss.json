@@ -20,27 +20,49 @@
             "variants": {
                 "default": {
                     "set": {
-                        "/nodes/gbuffer/properties/resolution scale": "3/4"
+                        "/nodes/gbuffer/properties/resolution scale": "3/4",
+                        "/nodes/render/properties/surface/nee sampling": "resampled (RIS)",
+                        "/nodes/render/properties/surface/samples per pixel": 1,
+                        "/nodes/render/properties/surface/shares/bsdf": 0.25,
+                        "/nodes/render/properties/surface/shares/guiding": 0.75
                     }
                 },
                 "fast": {
                     "set": {
                         "/nodes/gbuffer/properties/resolution scale": "3/4",
-                        "/nodes/render/properties/surface/samples per pixel": 1
+                        "/nodes/render/properties/surface/nee sampling": "mixture (MIS)",
+                        "/nodes/render/properties/surface/samples per pixel": 1,
+                        "/nodes/render/properties/surface/shares/bsdf": 0.125,
+                        "/nodes/render/properties/surface/shares/guiding": 0.375,
+                        "/nodes/render/properties/surface/shares/nee": 0.5
                     }
                 },
-                "quality": {},
+                "quality": {
+                    "set": {
+                        "/nodes/render/properties/surface/nee sampling": "resampled (RIS)",
+                        "/nodes/render/properties/surface/samples per pixel": 1,
+                        "/nodes/render/properties/surface/shares/bsdf": 0.25,
+                        "/nodes/render/properties/surface/shares/guiding": 0.75
+                    }
+                },
                 "ultra_fast": {
                     "set": {
                         "/nodes/gbuffer/properties/resolution scale": "1/2",
                         "/nodes/render/properties/surface/cache tail": true,
                         "/nodes/render/properties/surface/max diffuse bounces": 1,
-                        "/nodes/render/properties/surface/samples per pixel": 1
+                        "/nodes/render/properties/surface/nee sampling": "mixture (MIS)",
+                        "/nodes/render/properties/surface/samples per pixel": 1,
+                        "/nodes/render/properties/surface/shares/bsdf": 0.125,
+                        "/nodes/render/properties/surface/shares/guiding": 0.375,
+                        "/nodes/render/properties/surface/shares/nee": 0.5
                     }
                 },
                 "ultra_quality": {
                     "set": {
-                        "/nodes/render/properties/surface/nee sampling": "resampled (RIS)"
+                        "/nodes/render/properties/surface/nee sampling": "resampled (RIS)",
+                        "/nodes/render/properties/surface/samples per pixel": 2,
+                        "/nodes/render/properties/surface/shares/bsdf": 0.25,
+                        "/nodes/render/properties/surface/shares/guiding": 0.75
                     }
                 }
             }
