@@ -97,7 +97,7 @@
         "blit": {
             "enabled": true,
             "outputs": [
-                "acquire->imgui.acquire"
+                "canvas->imgui.canvas"
             ],
             "properties": {
                 "blit mode": "FIT",
@@ -170,7 +170,7 @@
         "output": {
             "enabled": true,
             "outputs": [
-                "acquire->blit.acquire",
+                "canvas->blit.canvas",
                 "controller->quake.controller",
                 "window->imgui.window",
                 "window->quake.window"

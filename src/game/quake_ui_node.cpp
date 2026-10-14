@@ -62,13 +62,8 @@ QuakeUiNode::describe_outputs(const merian::NodeIOLayout& io_layout) {
     return {{"out", con_out, merian::ConnectorAccess::color_attachment}};
 }
 
-void QuakeUiNode::initialize(const merian::ContextHandle& context,
-                             const merian::ResourceAllocatorHandle& allocator) {
-    this->context = context;
-    this->allocator = allocator;
-}
-
-void QuakeUiNode::ensure_pipeline(const vk::Format color_format) {
+void QuakeUiNode::ensure_pipeline(const merian::ContextHandle& context,
+                                  const vk::Format color_format) {
     if (pipeline && current_format == color_format)
         return;
 
@@ -111,7 +106,8 @@ void QuakeUiNode::ensure_pipeline(const vk::Format color_format) {
     current_format = color_format;
 }
 
-void QuakeUiNode::ensure_white_texture(const merian::CommandBufferHandle& cmd) {
+void QuakeUiNode::ensure_white_texture(const merian::ResourceAllocatorHandle& allocator,
+                                       const merian::CommandBufferHandle& cmd) {
     if (white_texture)
         return;
     const uint32_t white_pixel = 0xFFFFFFFFu;
@@ -131,9 +127,10 @@ QuakeUiNode::process(const merian::NodeIO& io,
     MERIAN_PROFILE_SCOPE_GPU(submission.get_cmd(), "QuakeUiNode::process");
     const merian::CommandBufferHandle& cmd = submission.get_cmd();
     const merian::ImageHandle& out_image = io[con_out].get_image(0);
+    const merian::ResourceAllocatorHandle& allocator = io.get_allocator();
 
-    ensure_white_texture(cmd);
-    ensure_pipeline(out_image->get_format());
+    ensure_white_texture(allocator, cmd);
+    ensure_pipeline(io.get_context(), out_image->get_format());
 
     const std::shared_ptr<UIDrawCommands>& draw_commands = io[con_ui_draw_commands];
     const std::shared_ptr<merian::Scene>& scene = io[con_scene];

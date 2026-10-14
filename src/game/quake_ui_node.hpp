@@ -42,9 +42,6 @@ class QuakeUiNode : public merian::Node {
     std::vector<merian::OutputConnectorDescriptor>
     describe_outputs(const merian::NodeIOLayout& io_layout) override;
 
-    void initialize(const merian::ContextHandle& context,
-                    const merian::ResourceAllocatorHandle& allocator) override;
-
     [[nodiscard]] merian::Node::NodeStatusFlags process(const merian::NodeIO& io,
                                                         const merian::NodeProcessInfo& info,
                                                         merian::Submission& submission) override;
@@ -52,11 +49,9 @@ class QuakeUiNode : public merian::Node {
     NodeStatusFlags properties(merian::Properties& props) override;
 
   private:
-    void ensure_pipeline(vk::Format color_format);
-    void ensure_white_texture(const merian::CommandBufferHandle& cmd);
-
-    merian::ContextHandle context;
-    merian::ResourceAllocatorHandle allocator;
+    void ensure_pipeline(const merian::ContextHandle& context, vk::Format color_format);
+    void ensure_white_texture(const merian::ResourceAllocatorHandle& allocator,
+                              const merian::CommandBufferHandle& cmd);
 
     merian::PtrInHandle<UIDrawCommands> con_ui_draw_commands =
         merian::PtrIn<UIDrawCommands>::create();

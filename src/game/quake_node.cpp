@@ -6,10 +6,6 @@
 
 QuakeNode::QuakeNode() : Node() {}
 
-QuakeNode::~QuakeNode() {
-    scene.reset(); // before the allocator
-}
-
 merian::DeviceSupportInfo
 QuakeNode::query_device_support(const merian::DeviceSupportQueryInfo& query_info) {
     return merian::DeviceSupportInfo::check(
@@ -18,9 +14,7 @@ QuakeNode::query_device_support(const merian::DeviceSupportQueryInfo& query_info
 
 void QuakeNode::initialize(const merian::ContextHandle& context,
                            const merian::ResourceAllocatorHandle& allocator) {
-    assert(this->context == nullptr && "QuakeNode was initialized multiple times.");
-    this->context = context;
-    this->allocator = allocator;
+    assert(!scene && "QuakeNode was initialized multiple times.");
     compile_context = context->get_shader_compile_context();
     texture_manager = std::make_shared<merian::TextureManager>(compile_context, context, allocator,
                                                                merian_quake::MAX_GLTEXTURES);
@@ -36,7 +30,8 @@ std::vector<merian::InputConnectorDescriptor> QuakeNode::describe_inputs() {
 
 std::vector<merian::OutputConnectorDescriptor>
 QuakeNode::describe_outputs([[maybe_unused]] const merian::NodeIOLayout& io_layout) {
-    return {{"scene", con_scene}, {"ui_draw_commands", con_ui_draw_commands}};
+    return {{.name = "scene", .connector = con_scene, .persistent = true},
+            {.name = "ui_draw_commands", .connector = con_ui_draw_commands, .persistent = true}};
 }
 
 [[nodiscard]] merian::Node::NodeStatusFlags QuakeNode::process(const merian::NodeIO& io,

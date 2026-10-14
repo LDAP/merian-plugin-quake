@@ -16,7 +16,6 @@ class QuakeScene;
 class QuakeNode : public merian::Node {
   public:
     QuakeNode();
-    ~QuakeNode() override;
 
     merian::DeviceSupportInfo
     query_device_support(const merian::DeviceSupportQueryInfo& query_info) override;
@@ -43,8 +42,6 @@ class QuakeNode : public merian::Node {
     void queue_command(const std::string& command);
 
   private:
-    merian::ContextHandle context;
-    merian::ResourceAllocatorHandle allocator;
     merian::ShaderCompileContextHandle compile_context;
     merian::TextureManagerHandle texture_manager;
     merian::MaterialSystemHandle material_system;
@@ -57,7 +54,7 @@ class QuakeNode : public merian::Node {
     merian::PtrInHandle<merian::Window> con_window = merian::PtrIn<merian::Window>::create();
     std::weak_ptr<merian::InputController> registered_controller;
 
-    merian::PtrOutHandle<merian::Scene> con_scene = merian::PtrOut<merian::Scene>::create(true);
+    merian::PtrOutHandle<merian::Scene> con_scene = merian::PtrOut<merian::Scene>::create();
     merian::PtrOutHandle<merian_quake::UIDrawCommands> con_ui_draw_commands =
-        merian::PtrOut<merian_quake::UIDrawCommands>::create(true);
+        merian::PtrOut<merian_quake::UIDrawCommands>::create();
 };
