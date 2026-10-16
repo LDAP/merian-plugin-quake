@@ -1,13 +1,21 @@
 {
     "nodes": {
         "add": {
+            "enabled": true,
+            "outputs": [
+                "out->dlss.src"
+            ],
             "properties": {
-                "number inputs": 3
-            }
+                "initial value": "",
+                "number inputs": 2,
+                "reduction": "accumulator + current_value"
+            },
+            "type": "Reduce"
         },
         "render": {
             "$+$outputs": [
-                "volume->add.input_2"
+                "irradiance->add.input_0",
+                "volume->add.input_1"
             ]
         }
     }

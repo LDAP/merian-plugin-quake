@@ -49,9 +49,16 @@
             "type": "Accumulate"
         },
         "add": {
+            "enabled": true,
             "outputs": [
                 "out->exposure.src"
-            ]
+            ],
+            "properties": {
+                "initial value": "",
+                "number inputs": 2,
+                "reduction": "accumulator + current_value"
+            },
+            "type": "Reduce"
         },
         "fxaa": {
             "enabled": true,
@@ -62,6 +69,7 @@
         },
         "gbuffer": {
             "$+$outputs": [
+                "emission->add.input_1",
                 "gbuffer->accumulate.gbuffer",
                 "gbuffer->svgf.gbuffer"
             ]
@@ -72,7 +80,8 @@
             ],
             "properties": {
                 "output": {
-                    "demodulate albedo": true
+                    "demodulate albedo": true,
+                    "emission on primary": false
                 }
             }
         },

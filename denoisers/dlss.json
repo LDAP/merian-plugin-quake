@@ -4,7 +4,9 @@
             "default": "off",
             "type": "variant",
             "variants": {
-                "off": {},
+                "off": {
+                    "merge": "denoisers/dlss_irradiance.json"
+                },
                 "on": {
                     "merge": [
                         "renderers/volume.json",
@@ -69,11 +71,6 @@
         }
     },
     "nodes": {
-        "add": {
-            "outputs": [
-                "out->dlss.src"
-            ]
-        },
         "dlss": {
             "enabled": true,
             "outputs": [
@@ -104,9 +101,6 @@
             }
         },
         "render": {
-            "$+$outputs": [
-                "irradiance->add.input_0"
-            ],
             "properties": {
                 "output": {
                     "demodulate albedo": false

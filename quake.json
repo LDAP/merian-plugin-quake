@@ -20,7 +20,6 @@
             "variants": {
                 "pt": {
                     "set": {
-                        "/nodes/render/properties/output/emission on primary": false,
                         "/nodes/render/properties/surface/max diffuse bounces": 2,
                         "/nodes/render/properties/surface/max glossy bounces": 2,
                         "/nodes/render/properties/surface/max path length": 5,
@@ -37,7 +36,6 @@
                     "set": {
                         "/nodes/guiding/properties/lc/LC min pdf": 10,
                         "/nodes/guiding/properties/mc/width confidence z": 0,
-                        "/nodes/render/properties/output/emission on primary": false,
                         "/nodes/render/properties/surface/max diffuse bounces": 2,
                         "/nodes/render/properties/surface/max glossy bounces": 2,
                         "/nodes/render/properties/surface/max path length": 5,
@@ -53,7 +51,6 @@
                 },
                 "pt_ssmm": {
                     "set": {
-                        "/nodes/render/properties/output/emission on primary": false,
                         "/nodes/render/properties/surface/max diffuse bounces": 2,
                         "/nodes/render/properties/surface/max glossy bounces": 2,
                         "/nodes/render/properties/surface/max path length": 5,
@@ -64,11 +61,6 @@
                         "/nodes/render/properties/surface/shares/nee": 0.1,
                         "/nodes/render/properties/volume/shares/guiding": 0.8,
                         "/nodes/render/properties/volume/shares/phase": 0.1
-                    }
-                },
-                "restir_di": {
-                    "set": {
-                        "/nodes/render/properties/output/emission on primary": false
                     }
                 }
             }
@@ -85,15 +77,6 @@
         "renderers.json"
     ],
     "nodes": {
-        "add": {
-            "enabled": true,
-            "properties": {
-                "initial value": "",
-                "number inputs": 2,
-                "reduction": "accumulator + current_value"
-            },
-            "type": "Reduce"
-        },
         "blit": {
             "enabled": true,
             "outputs": [
@@ -142,7 +125,6 @@
         "gbuffer": {
             "enabled": true,
             "outputs": [
-                "emission->add.input_1",
                 "gbuffer->render.gbuffer"
             ],
             "properties": {
