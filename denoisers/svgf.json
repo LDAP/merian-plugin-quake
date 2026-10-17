@@ -1,20 +1,4 @@
 {
-    "cli": {
-        "volume": {
-            "default": "off",
-            "type": "variant",
-            "variants": {
-                "off": {},
-                "on": {
-                    "merge": [
-                        "renderers/volume.json",
-                        "renderers/mcpg_volume.json",
-                        "denoisers/svgf_volume.json"
-                    ]
-                }
-            }
-        }
-    },
     "nodes": {
         "accumulate": {
             "enabled": true,

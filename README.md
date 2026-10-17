@@ -49,10 +49,11 @@ Everything after the graph that is not an option below is the Quake command line
 ### Options
 
 - `--renderer <pt|pt_mcpg|pt_ssmm|restir_di|restir_pt>`: the renderer (default `pt_mcpg`).
-- `--denoiser <svgf|dlss>`: the denoiser (default `svgf`).
-- `--volume <off|on>`: traces the fog.
+- `--denoiser <svgf|dlss|svgf_volume|dlss_volume>`: the denoiser (default `svgf`); the `_volume`
+  variants also trace the fog.
 - `--max-path-length <n>`, `--spp <n>`: path-traced renderers.
-- `--quality <ultra_fast|fast|default|quality|ultra_quality>`, only with `--denoiser dlss`:
+- `--quality <ultra_fast|fast|default|quality|ultra_quality>`, for the `dlss` denoisers (which
+  default to `default`):
     - `ultra_quality`: 2 samples per pixel at full resolution.
     - `quality`: traces at full resolution.
     - `default`: traces at 3/4 resolution and lets DLSS upscale.
@@ -60,6 +61,5 @@ Everything after the graph that is not an option below is the Quake command line
     - `ultra_fast`: like `fast` at 1/2 resolution with 1 diffuse bounce, and ends paths in the
       irradiance cache (not available with `--renderer pt`).
 
-  Options apply in command line order, so give `--quality` after `--renderer`.
 
 `--help` after `quake.json` lists all options of the graph.

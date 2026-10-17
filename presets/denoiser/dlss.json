@@ -1,0 +1,13 @@
+{
+    "include": [
+        "denoisers/dlss.json",
+        "denoisers/dlss_irradiance.json"
+    ],
+    "nodes": {
+        "gbuffer": {
+            "properties": {
+                "resolution scale": "3/4"
+            }
+        }
+    }
+}

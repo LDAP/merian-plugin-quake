@@ -2,80 +2,14 @@
     "cli": {
         "--": {
             "pointer": "/nodes/quake/properties/startup commands"
-        },
-        "denoiser": {
-            "default": "svgf",
-            "type": "variant",
-            "variants": {
-                "dlss": {
-                    "merge": "denoisers/dlss.json"
-                },
-                "svgf": {
-                    "merge": "denoisers/svgf.json"
-                }
-            }
-        },
-        "renderer": {
-            "default": "pt_mcpg",
-            "variants": {
-                "pt": {
-                    "set": {
-                        "/nodes/render/properties/surface/max diffuse bounces": 2,
-                        "/nodes/render/properties/surface/max glossy bounces": 2,
-                        "/nodes/render/properties/surface/max path length": 5,
-                        "/nodes/render/properties/surface/max transmission bounces": 2,
-                        "/nodes/render/properties/surface/nee sampling": "mixture (MIS)",
-                        "/nodes/render/properties/surface/shares/bsdf": 0.1,
-                        "/nodes/render/properties/surface/shares/guiding": 0.8,
-                        "/nodes/render/properties/surface/shares/nee": 0.1,
-                        "/nodes/render/properties/volume/shares/guiding": 0.8,
-                        "/nodes/render/properties/volume/shares/phase": 0.1
-                    }
-                },
-                "pt_mcpg": {
-                    "set": {
-                        "/nodes/guiding/properties/lc/LC min pdf": 10,
-                        "/nodes/guiding/properties/mc/width confidence z": 0,
-                        "/nodes/render/properties/surface/max diffuse bounces": 2,
-                        "/nodes/render/properties/surface/max glossy bounces": 2,
-                        "/nodes/render/properties/surface/max path length": 5,
-                        "/nodes/render/properties/surface/max transmission bounces": 2,
-                        "/nodes/render/properties/surface/nee sampling": "resampled (RIS)",
-                        "/nodes/render/properties/surface/samples per pixel": 1,
-                        "/nodes/render/properties/surface/shares/bsdf": 0.25,
-                        "/nodes/render/properties/surface/shares/guiding": 0.75,
-                        "/nodes/render/properties/surface/shares/nee": 0.1,
-                        "/nodes/render/properties/volume/shares/guiding": 0.8,
-                        "/nodes/render/properties/volume/shares/phase": 0.1
-                    }
-                },
-                "pt_ssmm": {
-                    "set": {
-                        "/nodes/render/properties/surface/max diffuse bounces": 2,
-                        "/nodes/render/properties/surface/max glossy bounces": 2,
-                        "/nodes/render/properties/surface/max path length": 5,
-                        "/nodes/render/properties/surface/max transmission bounces": 2,
-                        "/nodes/render/properties/surface/nee sampling": "mixture (MIS)",
-                        "/nodes/render/properties/surface/shares/bsdf": 0.1,
-                        "/nodes/render/properties/surface/shares/guiding": 0.8,
-                        "/nodes/render/properties/surface/shares/nee": 0.1,
-                        "/nodes/render/properties/volume/shares/guiding": 0.8,
-                        "/nodes/render/properties/volume/shares/phase": 0.1
-                    }
-                }
-            }
         }
     },
     "graph_properties": {
-        "flush thread pool": true,
         "fps limiter": false,
         "imgui event": "ui",
         "iterations in flight": 2,
-        "time overwrite": "None"
+        "time source": "Auto"
     },
-    "include": [
-        "renderers.json"
-    ],
     "nodes": {
         "blit": {
             "enabled": true,
@@ -159,9 +93,9 @@
             ],
             "properties": {
                 "acquire timeout": 100000000,
-                "backend": "SDL3 (Video Subsystem)",
+                "backend": "auto",
                 "blit mode": "FIT",
-                "mode": "fullscreen",
+                "mode": "windowed",
                 "on_should_close_actions": {
                     "remove node": false,
                     "send sigint": false,
@@ -226,5 +160,21 @@
             "type": "Quake UI"
         }
     },
-    "version": 4
+    "version": 4,
+    "presets": {
+        "renderer": {
+            "folder": "presets/renderer",
+            "default": "pt_mcpg",
+            "order": 0
+        },
+        "denoiser": {
+            "folder": "presets/denoiser",
+            "default": "svgf",
+            "order": 1
+        },
+        "quality": {
+            "folder": "presets/quality",
+            "order": 2
+        }
+    }
 }

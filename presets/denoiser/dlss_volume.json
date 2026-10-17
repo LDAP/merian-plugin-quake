@@ -1,0 +1,15 @@
+{
+    "include": [
+        "denoisers/dlss.json",
+        "parts/volume.json",
+        "renderers/mcpg_volume.json",
+        "denoisers/dlss_volume.json"
+    ],
+    "nodes": {
+        "gbuffer": {
+            "properties": {
+                "resolution scale": "3/4"
+            }
+        }
+    }
+}

@@ -1,0 +1,40 @@
+{
+    "include": [
+        "renderers/pt_mcpg.json"
+    ],
+    "nodes": {
+        "guiding": {
+            "properties": {
+                "lc": {
+                    "LC min pdf": 10
+                },
+                "mc": {
+                    "width confidence z": 0
+                }
+            }
+        },
+        "render": {
+            "properties": {
+                "surface": {
+                    "max diffuse bounces": 2,
+                    "max glossy bounces": 2,
+                    "max path length": 5,
+                    "max transmission bounces": 2,
+                    "nee sampling": "resampled (RIS)",
+                    "shares": {
+                        "bsdf": 0.25,
+                        "guiding": 0.75,
+                        "nee": 0.1
+                    },
+                    "samples per pixel": 1
+                },
+                "volume": {
+                    "shares": {
+                        "guiding": 0.8,
+                        "phase": 0.1
+                    }
+                }
+            }
+        }
+    }
+}

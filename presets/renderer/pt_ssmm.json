@@ -1,0 +1,29 @@
+{
+    "include": [
+        "renderers/pt_ssmm.json"
+    ],
+    "nodes": {
+        "render": {
+            "properties": {
+                "surface": {
+                    "max diffuse bounces": 2,
+                    "max glossy bounces": 2,
+                    "max path length": 5,
+                    "max transmission bounces": 2,
+                    "nee sampling": "mixture (MIS)",
+                    "shares": {
+                        "bsdf": 0.1,
+                        "guiding": 0.8,
+                        "nee": 0.1
+                    }
+                },
+                "volume": {
+                    "shares": {
+                        "guiding": 0.8,
+                        "phase": 0.1
+                    }
+                }
+            }
+        }
+    }
+}

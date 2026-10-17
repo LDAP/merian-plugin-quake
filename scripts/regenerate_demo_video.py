@@ -8,14 +8,14 @@ import imageio_ffmpeg
 from PIL import Image
 
 CLIPS = [
-    ('alk_start', 'alk', 'start', (832, 60, 536, 0, 180), (832, -65, 536, 0, 180), 150, 0, []),
-    ('ad_tears', 'ad', 'ad_tears', (760, -256, -470, 12, 180), (-55, -256, -642, 12, 180), 188, 60, []),
-    ('ad_start', 'ad', 'start', (-352, 700, 410, -8, 90), (-352, 910, 413, -8, 90), 150, None, []),
-    ('immortal_start', 'immortal', 'start', (-280, -140, 86, -8, 245), (-700, -140, 86, -8, 245), 150, None, []),
-    ('qbj3_hall', 'qbj3', 'start', (-1950, 130, 2000, -10, 90), (-2450, 130, 2000, -10, 90), 210, None, []),
-    ('ad_sepulcher', 'ad', 'ad_sepulcher', (-2540, 2400, 400, -5, 330), (-2540, 2400, 400, -5, 210), 240, 60, []),
-    ('ad_azad', 'ad', 'ad_azad', (300, -3200, 2300, 8, 90), (300, -1700, 2300, 8, 90), 150, None, ['--volume', 'on']),
-    ('ad_grendel', 'ad', 'ad_grendel', (-170, 0, 150, 20, 0), (-170, 0, 870, 55, 0), 240, 100, ['--volume', 'on']),
+    ('alk_start', 'alk', 'start', (832, 60, 536, 0, 180), (832, -65, 536, 0, 180), 150, 0, 'dlss'),
+    ('ad_tears', 'ad', 'ad_tears', (760, -256, -470, 12, 180), (-55, -256, -642, 12, 180), 188, 60, 'dlss'),
+    ('ad_start', 'ad', 'start', (-352, 700, 410, -8, 90), (-352, 910, 413, -8, 90), 150, None, 'dlss'),
+    ('immortal_start', 'immortal', 'start', (-280, -140, 86, -8, 245), (-700, -140, 86, -8, 245), 150, None, 'dlss'),
+    ('qbj3_hall', 'qbj3', 'start', (-1950, 130, 2000, -10, 90), (-2450, 130, 2000, -10, 90), 210, None, 'dlss'),
+    ('ad_sepulcher', 'ad', 'ad_sepulcher', (-2540, 2400, 400, -5, 330), (-2540, 2400, 400, -5, 210), 240, 60, 'dlss'),
+    ('ad_azad', 'ad', 'ad_azad', (300, -3200, 2300, 8, 90), (300, -1700, 2300, 8, 90), 150, None, 'dlss_volume'),
+    ('ad_grendel', 'ad', 'ad_grendel', (-170, 0, 150, 20, 0), (-170, 0, 870, 55, 0), 240, 100, 'dlss_volume'),
 ]
 FPS = 30
 HOLD = 210
@@ -53,7 +53,7 @@ def camera_script(start, end, frames):
     return '\n'.join(lines + ['-' + key[1:] for _, key in look])
 
 
-def render(name, game, bsp, start, end, frames, args):
+def render(name, game, bsp, start, end, frames, denoiser):
     directory = os.path.join(out, name)
     shutil.rmtree(directory, ignore_errors=True)
     os.makedirs(directory)
@@ -65,14 +65,14 @@ def render(name, game, bsp, start, end, frames, args):
         'gbuffer': {'properties': {'5': False, '6': False}},
         'render': {'properties': {'instance_mask': {'5': False, '6': False}}},
         'tonemap': {'$+$outputs': ['out->write.src']},
-        'write': {'enabled': True, 'type': 'Image Write', 'properties': {
+        'write': {'enabled': True, 'type': 'Image Sink', 'properties': {
             'format': 'PNG', 'filename': os.path.join(directory, 'f_{image_index_total:04}').replace('\\', '/'),
             'enable': True, 'trigger': 'iteration', 'iteration': 96 + HOLD}}}}
     capture_file = os.path.join(directory, 'capture.json')
     with open(capture_file, 'w') as f:
         json.dump(capture, f)
     command = ['meson', 'devenv', '-C', build, 'merian-graph-run', os.path.join(plugin, 'quake.json'),
-               '--denoiser', 'dlss', *args, '--quality', 'ultra_quality', '--merge', capture_file, f'--max-iterations={95 + HOLD + frames}',
+               '--denoiser', denoiser, '--quality', 'ultra_quality', '--merge', capture_file, f'--max-iterations={95 + HOLD + frames}',
                f'--time-delta={1000 / FPS:.4f}', '-nosound', '-basedir', quake_dir, '-game', game,
                '+map', bsp, '+exec', 'demo_video.cfg']
     with open(os.path.join(directory, 'run.log'), 'w') as log:
@@ -84,10 +84,10 @@ def render(name, game, bsp, start, end, frames, args):
 
 
 segments = []
-for name, game, bsp, start, end, frames, screenshot, args in CLIPS:
+for name, game, bsp, start, end, frames, screenshot, denoiser in CLIPS:
     directory = os.path.join(out, name)
     if not only or name in only or not os.path.isdir(directory):
-        files = render(name, game, bsp, start, end, frames, args)
+        files = render(name, game, bsp, start, end, frames, denoiser)
     else:
         files = sorted(os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.png'))[:frames]
     segment = [Image.open(f).convert('RGB').resize(SIZE, Image.LANCZOS) for f in files]
