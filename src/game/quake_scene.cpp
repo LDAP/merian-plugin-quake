@@ -63,6 +63,8 @@ struct QuakeData {
     merian::float3 current_sun_direction{};
 
     float timediff = 0;
+
+    bool shut_down = false;
 };
 QuakeData g_quake_data;
 
@@ -123,6 +125,7 @@ void shutdown_quakespasm() {
     CL_Disconnect();
     Host_ShutdownServer(false);
     Host_Shutdown();
+    g_quake_data.shut_down = true;
 
     free(g_quake_data.params.membase);
 }
@@ -393,6 +396,9 @@ QuakeScene::QuakeScene(const merian::ShaderCompileContextHandle& compile_context
 
     if (g_quake_data.quake_scene != nullptr) {
         throw std::runtime_error{"only one QuakeScene can exist (Quake uses static globals)"};
+    }
+    if (g_quake_data.shut_down) {
+        throw std::runtime_error{"Quake cannot start again in a process it ran in"};
     }
     g_quake_data.quake_scene = this;
 

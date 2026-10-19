@@ -1,0 +1,7 @@
+{
+    "include": [
+        "denoisers/dlss.json",
+        "denoisers/dlss_irradiance.json",
+        "presets/quality/default.json"
+    ]
+}

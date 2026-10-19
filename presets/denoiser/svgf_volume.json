@@ -1,0 +1,8 @@
+{
+    "include": [
+        "denoisers/svgf.json",
+        "parts/volume.json",
+        "renderers/mcpg_volume.json",
+        "denoisers/svgf_volume.json"
+    ]
+}

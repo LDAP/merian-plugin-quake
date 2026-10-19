@@ -1,0 +1,24 @@
+{
+    "nodes": {
+        "gbuffer": {
+            "properties": {
+                "resolution scale": "1/2"
+            }
+        },
+        "render": {
+            "properties": {
+                "surface": {
+                    "cache tail": true,
+                    "max diffuse bounces": 1,
+                    "nee sampling": "mixture (MIS)",
+                    "samples per pixel": 1,
+                    "shares": {
+                        "bsdf": 0.125,
+                        "guiding": 0.375,
+                        "nee": 0.5
+                    }
+                }
+            }
+        }
+    }
+}

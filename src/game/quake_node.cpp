@@ -37,8 +37,6 @@ QuakeNode::describe_outputs([[maybe_unused]] const merian::NodeIOLayout& io_layo
 [[nodiscard]] merian::Node::NodeStatusFlags QuakeNode::process(const merian::NodeIO& io,
                                                                const merian::NodeProcessInfo& info,
                                                                merian::Submission& submission) {
-    const merian::CommandBufferHandle& cmd = submission.get_cmd();
-
     // Forward the Window node's controller/window to the engine for input
     // (re-wire if it changes).
     if (io.is_connected(con_controller)) {
@@ -51,8 +49,9 @@ QuakeNode::describe_outputs([[maybe_unused]] const merian::NodeIOLayout& io_layo
         }
     }
 
-    scene->update(cmd, static_cast<float>(info.get_elapsed()),
-                  static_cast<float>(info.get_time_delta()), info.get_total_iteration(),
+    scene->update(submission, static_cast<float>(info.get_elapsed()),
+                  static_cast<float>(info.get_time_delta()),
+                  static_cast<uint32_t>(info.get_iteration()), io.get_seed(),
                   info.get_shader_object_allocator());
 
     io[con_ui_draw_commands] = scene->get_ui_draw_commands();

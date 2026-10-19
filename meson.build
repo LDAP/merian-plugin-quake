@@ -42,4 +42,8 @@ shared_library(
 # merian's plugin loader finds them automatically (resource_search_paths convention).
 install_subdir('res', strip_directory: true,
                install_dir: join_paths(get_option('libdir'), 'merian', 'plugins', 'merian-plugin-quake'))
-install_data('quake.json', install_dir: join_paths(get_option('datadir'), 'merian-plugin-quake'))
+data_dir = join_paths(get_option('datadir'), 'merian-plugin-quake')
+install_data('quake.json', install_dir: data_dir)
+foreach dir : ['denoisers', 'presets', 'renderers']
+    install_subdir(dir, install_dir: data_dir)
+endforeach

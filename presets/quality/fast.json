@@ -1,0 +1,22 @@
+{
+    "nodes": {
+        "gbuffer": {
+            "properties": {
+                "resolution scale": "3/4"
+            }
+        },
+        "render": {
+            "properties": {
+                "surface": {
+                    "nee sampling": "mixture (MIS)",
+                    "samples per pixel": 1,
+                    "shares": {
+                        "bsdf": 0.125,
+                        "guiding": 0.375,
+                        "nee": 0.5
+                    }
+                }
+            }
+        }
+    }
+}

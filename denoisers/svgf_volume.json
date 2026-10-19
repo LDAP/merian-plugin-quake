@@ -21,15 +21,13 @@
         "volume_accumulate": {
             "enabled": true,
             "outputs": [
-                "history->volume_accumulate.prev_history",
                 "history->volume_svgf.history",
-                "out->volume_accumulate.prev_out",
                 "out->volume_svgf.src"
             ],
             "properties": {
-                "IPR factor": 50.0,
+                "ipr factor": 50.0,
                 "adaptivity": 0.9009900093078613,
-                "adaptivity IPR factor": 15.0,
+                "adaptivity ipr factor": 15.0,
                 "adaptivity percentile lower": 0.056106001138687134,
                 "adaptivity percentile upper": 0.9042909741401672,
                 "alpha": 0.9020000100135803,
@@ -52,8 +50,7 @@
         "volume_svgf": {
             "enabled": true,
             "outputs": [
-                "out->add.input_2",
-                "out->volume_svgf.prev_out"
+                "out->add.input_2"
             ],
             "properties": {
                 "iterations": 5,
@@ -64,7 +61,7 @@
                     "normals": 3.1415927410125732,
                     "type": "subsampled",
                     "kaleidoscope": false,
-                    "kaleidoscope: shmem": true,
+                    "kaleidoscope shmem": true,
                     "z-bias depth": 0.0,
                     "z-bias normals": 0.0
                 },

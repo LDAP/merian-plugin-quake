@@ -2,96 +2,13 @@
     "cli": {
         "--": {
             "pointer": "/nodes/quake/properties/startup commands"
-        },
-        "denoiser": {
-            "default": "svgf",
-            "type": "variant",
-            "variants": {
-                "dlss": {
-                    "merge": "denoisers/dlss.json"
-                },
-                "svgf": {
-                    "merge": "denoisers/svgf.json"
-                }
-            }
-        },
-        "renderer": {
-            "default": "pt_mcpg",
-            "variants": {
-                "pt": {
-                    "set": {
-                        "/nodes/render/properties/surface/max diffuse bounces": 2,
-                        "/nodes/render/properties/surface/max glossy bounces": 2,
-                        "/nodes/render/properties/surface/max path length": 5,
-                        "/nodes/render/properties/surface/max transmission bounces": 2,
-                        "/nodes/render/properties/surface/nee sampling": "mixture (MIS)",
-                        "/nodes/render/properties/surface/shares/bsdf": 0.1,
-                        "/nodes/render/properties/surface/shares/guiding": 0.8,
-                        "/nodes/render/properties/surface/shares/nee": 0.1,
-                        "/nodes/render/properties/volume/shares/guiding": 0.8,
-                        "/nodes/render/properties/volume/shares/phase": 0.1
-                    }
-                },
-                "pt_mcpg": {
-                    "set": {
-                        "/nodes/guiding/properties/lc/LC min pdf": 10,
-                        "/nodes/guiding/properties/mc/width confidence z": 0,
-                        "/nodes/render/properties/surface/max diffuse bounces": 2,
-                        "/nodes/render/properties/surface/max glossy bounces": 2,
-                        "/nodes/render/properties/surface/max path length": 5,
-                        "/nodes/render/properties/surface/max transmission bounces": 2,
-                        "/nodes/render/properties/surface/nee sampling": "resampled (RIS)",
-                        "/nodes/render/properties/surface/samples per pixel": 1,
-                        "/nodes/render/properties/surface/shares/bsdf": 0.25,
-                        "/nodes/render/properties/surface/shares/guiding": 0.75,
-                        "/nodes/render/properties/surface/shares/nee": 0.1,
-                        "/nodes/render/properties/volume/shares/guiding": 0.8,
-                        "/nodes/render/properties/volume/shares/phase": 0.1
-                    }
-                },
-                "pt_ssmm": {
-                    "set": {
-                        "/nodes/render/properties/surface/max diffuse bounces": 2,
-                        "/nodes/render/properties/surface/max glossy bounces": 2,
-                        "/nodes/render/properties/surface/max path length": 5,
-                        "/nodes/render/properties/surface/max transmission bounces": 2,
-                        "/nodes/render/properties/surface/nee sampling": "mixture (MIS)",
-                        "/nodes/render/properties/surface/shares/bsdf": 0.1,
-                        "/nodes/render/properties/surface/shares/guiding": 0.8,
-                        "/nodes/render/properties/surface/shares/nee": 0.1,
-                        "/nodes/render/properties/volume/shares/guiding": 0.8,
-                        "/nodes/render/properties/volume/shares/phase": 0.1
-                    }
-                }
-            }
         }
     },
-    "graph_properties": {
-        "flush thread pool": true,
-        "fps limiter": false,
-        "imgui event": "ui",
-        "iterations in flight": 2,
-        "time overwrite": "None"
-    },
-    "include": [
-        "renderers.json"
-    ],
     "nodes": {
-        "blit": {
-            "enabled": true,
-            "outputs": [
-                "canvas->imgui.canvas"
-            ],
-            "properties": {
-                "blit mode": "FIT",
-                "source array element": 0
-            },
-            "type": "Swapchain Blit"
-        },
         "composite": {
             "enabled": true,
             "outputs": [
-                "out->blit.src"
+                "out->display.src"
             ],
             "properties": {
                 "initial value": "",
@@ -100,15 +17,19 @@
             },
             "type": "Reduce"
         },
+        "display": {
+            "enabled": true,
+            "type": "Swapchain Blit"
+        },
         "exposure": {
             "enabled": true,
             "outputs": [
                 "out->tonemap.src"
             ],
             "properties": {
-                "ISO": 856.0,
-                "K": 2.963,
-                "aperature": 1.1200000047683716,
+                "iso": 856.0,
+                "k": 2.963,
+                "aperture": 1.1200000047683716,
                 "autoexposure": true,
                 "max exposure": 199.6,
                 "max log luminance": 27.0,
@@ -116,7 +37,7 @@
                 "min exposure": 1.996e-08,
                 "min log luminance": -9.353,
                 "q": 0.6499999761581421,
-                "shutter time (ms)": 768.0,
+                "shutter time": 768.0,
                 "speed down": 5.099999904632568,
                 "speed up": 3.0999999046325684
             },
@@ -142,30 +63,20 @@
             },
             "type": "GBuffer (Raytraced)"
         },
-        "imgui": {
-            "enabled": true,
-            "properties": {
-                "imgui event": "ui"
-            },
-            "type": "ImGui"
-        },
         "output": {
             "enabled": true,
             "outputs": [
-                "canvas->blit.canvas",
+                "canvas->display.canvas",
                 "controller->quake.controller",
-                "window->imgui.window",
                 "window->quake.window"
             ],
             "properties": {
                 "acquire timeout": 100000000,
-                "backend": "SDL3 (Video Subsystem)",
-                "blit mode": "FIT",
-                "mode": "fullscreen",
-                "on_should_close_actions": {
+                "backend": "auto",
+                "mode": "windowed",
+                "on close": {
                     "remove node": false,
-                    "send sigint": false,
-                    "send sigterm": true
+                    "send event": true
                 },
                 "present mode": "Mailbox",
                 "rebuild on recreate": false,
@@ -184,9 +95,9 @@
             "properties": {
                 "command": "",
                 "env": {
-                    "Pitch": 0.0,
-                    "Type": "Empty",
-                    "Yaw": 0.0
+                    "pitch": 0.0,
+                    "type": "Empty",
+                    "yaw": 0.0
                 },
                 "filtering": "nearest",
                 "gamestate update": true,
@@ -194,10 +105,10 @@
                 "overwrite sun": false,
                 "rebuild after stop": true,
                 "settings": {
-                    "Alpha Test Threshold": 0.699999988079071,
-                    "BLAS Rebuild Fraction": 0.33000001311302185,
-                    "Clamp Normals": true,
-                    "Pretransform Animated": false
+                    "alpha test threshold": 0.699999988079071,
+                    "blas rebuild fraction": 0.33000001311302185,
+                    "clamp normals": true,
+                    "pretransform animated": false
                 },
                 "startup commands": "",
                 "stop after worldspawn": -1,
@@ -226,5 +137,26 @@
             "type": "Quake UI"
         }
     },
-    "version": 4
+    "version": 4,
+    "presets": {
+        "renderer": {
+            "folder": "presets/renderer",
+            "default": "pt_mcpg",
+            "order": 0
+        },
+        "denoiser": {
+            "folder": "presets/denoiser",
+            "default": "svgf",
+            "order": 1
+        },
+        "quality": {
+            "folder": "presets/quality",
+            "order": 2
+        },
+        "mixin": {
+            "folder": "presets/mixin",
+            "multiple": true,
+            "order": 3
+        }
+    }
 }

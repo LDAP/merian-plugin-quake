@@ -1,34 +1,16 @@
 {
-    "cli": {
-        "volume": {
-            "default": "off",
-            "type": "variant",
-            "variants": {
-                "off": {},
-                "on": {
-                    "merge": [
-                        "renderers/volume.json",
-                        "renderers/mcpg_volume.json",
-                        "denoisers/svgf_volume.json"
-                    ]
-                }
-            }
-        }
-    },
     "nodes": {
         "accumulate": {
             "enabled": true,
             "outputs": [
-                "history->accumulate.prev_history",
                 "history->svgf.history",
-                "out->accumulate.prev_out",
                 "out->svgf.src",
                 "out->ui.extent_ref"
             ],
             "properties": {
-                "IPR factor": 50.0,
+                "ipr factor": 50.0,
                 "adaptivity": 0.9009900093078613,
-                "adaptivity IPR factor": 3.0,
+                "adaptivity ipr factor": 3.0,
                 "adaptivity percentile lower": 0.1902180016040802,
                 "adaptivity percentile upper": 0.9065219759941101,
                 "alpha": 0.9509999752044678,
@@ -88,8 +70,7 @@
         "svgf": {
             "enabled": true,
             "outputs": [
-                "out->add.input_0",
-                "out->svgf.prev_out"
+                "out->add.input_0"
             ],
             "properties": {
                 "iterations": 5,
@@ -100,7 +81,7 @@
                     "normals": 0.5235987901687622,
                     "type": "subsampled",
                     "kaleidoscope": false,
-                    "kaleidoscope: shmem": true,
+                    "kaleidoscope shmem": true,
                     "z-bias depth": 0.0,
                     "z-bias normals": 3000.0
                 },
