@@ -37,8 +37,7 @@ QuakeNode::describe_outputs([[maybe_unused]] const merian::NodeIOLayout& io_layo
 [[nodiscard]] merian::Node::NodeStatusFlags QuakeNode::process(const merian::NodeIO& io,
                                                                const merian::NodeProcessInfo& info,
                                                                merian::Submission& submission) {
-    // Forward the Window node's controller/window to the engine for input
-    // (re-wire if it changes).
+    // forward the Window node's controller and window to the engine
     if (io.is_connected(con_controller)) {
         const merian::InputControllerHandle& controller = io[con_controller];
         if (controller && controller != registered_controller.lock()) {

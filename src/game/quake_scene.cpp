@@ -70,9 +70,7 @@ QuakeData g_quake_data;
 
 constexpr int DEFAULT_HEAP_SIZE = 1024 * 1024 * 1024;
 
-// startup_commands is tokenized on whitespace into the engine command line
-// (e.g. "-game ad +skill 2 +map start"); double quotes keep a token with spaces together and
-// lines starting with # are ignored.
+// tokenized like a command line; double quotes group, lines starting with # are skipped
 void init_quakespasm(const std::string& startup_commands) {
     std::vector<std::string>& tokens = g_quake_data.argv_tokens;
     tokens.assign(1, "quakespasm");
@@ -402,7 +400,6 @@ QuakeScene::QuakeScene(const merian::ShaderCompileContextHandle& compile_context
     }
     g_quake_data.quake_scene = this;
 
-    // Scene
     const auto& tm = get_texture_manager();
 
     tm->resize(TEXTURE_CAPACITY);
@@ -1049,7 +1046,6 @@ void QuakeScene::unload_world() {
         remove_node(particle_node_id);
         particle_node_id = merian::Scene::NODE_ID_INVALID;
     }
-    particle_instance_attached = false;
     if (world_node_id != merian::Scene::NODE_ID_INVALID) {
         remove_node(world_node_id);
         world_node_id = merian::Scene::NODE_ID_INVALID;
@@ -1062,13 +1058,13 @@ void QuakeScene::unload_world() {
     light_entity_materials.clear();
 
     for (auto& [_, info] : alias_model_info)
-        defer_buffer_release(std::move(info.index_buffer));
+        retire(std::move(info.index_buffer));
     alias_model_info.clear();
 
     for (auto& [_, parts] : brush_submodel_geo) {
         for (auto& part : parts) {
-            defer_buffer_release(std::move(part.vb));
-            defer_buffer_release(std::move(part.ib));
+            retire(std::move(part.vb));
+            retire(std::move(part.ib));
         }
     }
     brush_submodel_geo.clear();
@@ -1429,16 +1425,17 @@ void QuakeScene::init_particle_batch() {
     node.name = "particles";
     particle_node_id = add_node(std::move(node));
 
-    auto mesh = std::make_unique<QuakeHostDynamicMesh>();
+    auto mesh = std::make_unique<merian::Scene::SimpleMesh>();
     mesh->name = "particles";
     mesh->material_id = particle_material_id;
     mesh->flags = merian::Scene::MeshFlags::IsMorphed |
                   merian::Scene::MeshFlags::HasVariableTopology |
                   merian::Scene::MeshFlags::TwoSided;
     mesh->instance_mask = to_mask(InstanceMask::PARTICLE);
+    init_particle_geo(mesh->vertices, mesh->indices);
+    particle_slots.clear();
     particle_mesh_id = add_mesh(std::move(mesh));
-    // update_particles attaches the instance lazily on first non-empty extraction.
-    particle_instance_attached = false;
+    add_mesh_instance(particle_mesh_id, particle_node_id);
 }
 
 // --- Per-entity slot management ---
@@ -1508,7 +1505,6 @@ void QuakeScene::update_alias_entity(entity_t* ent,
         mesh->flags = merian::Scene::MeshFlags::IsMorphed | merian::Scene::MeshFlags::FlipFacing;
         mesh->instance_mask = instance_mask;
         mesh->vertices.resize(info.vertex_count);
-        mesh->prev_vertices.resize(info.vertex_count);
         write_alias_uvs(hdr, mesh->vertices.data());
         mesh->ib_shared = info.index_buffer;
         mesh->vertex_count = info.vertex_count;
@@ -1555,25 +1551,13 @@ void QuakeScene::update_alias_entity(entity_t* ent,
     R_SetupAliasFrame(ent, hdr, ent->frame, &lerpdata);
     R_SetupEntityTransform(ent, &lerpdata);
 
-    const int prev_pose1 = slot->cached_pose1 >= 0 ? slot->cached_pose1 : lerpdata.pose1;
-    const int prev_pose2 = slot->cached_pose2 >= 0 ? slot->cached_pose2 : lerpdata.pose2;
-    const float prev_blend = slot->cached_blend >= 0.f ? slot->cached_blend : lerpdata.blend;
-
-    const bool pose_changed =
-        lerpdata.pose1 != slot->cached_pose1 || lerpdata.pose2 != slot->cached_pose2 ||
-        lerpdata.blend != slot->cached_blend || prev_pose1 != slot->cached_prev_pose1 ||
-        prev_pose2 != slot->cached_prev_pose2 || prev_blend != slot->cached_prev_blend;
-
-    if (pose_changed) {
+    if (lerpdata.pose1 != slot->cached_pose1 || lerpdata.pose2 != slot->cached_pose2 ||
+        lerpdata.blend != slot->cached_blend) {
         lerp_alias_vertices(hdr, info_it->second.baked_normals.data(), lerpdata.pose1,
-                            lerpdata.pose2, lerpdata.blend, prev_pose1, prev_pose2, prev_blend,
-                            mesh.vertices.data(), mesh.prev_vertices.data());
+                            lerpdata.pose2, lerpdata.blend, mesh.vertices.data());
         slot->cached_pose1 = lerpdata.pose1;
         slot->cached_pose2 = lerpdata.pose2;
         slot->cached_blend = lerpdata.blend;
-        slot->cached_prev_pose1 = prev_pose1;
-        slot->cached_prev_pose2 = prev_pose2;
-        slot->cached_prev_blend = prev_blend;
         mesh.vertices_dirty = true;
     }
 
@@ -1715,7 +1699,6 @@ void QuakeScene::update_sprite_entity(entity_t* ent) {
 
     if (const auto transform = sprite_node_transform(ent)) {
         update_node(slot->node_id, *transform);
-        VectorCopy(ent->origin, ent->mv_prev_origin);
     }
 }
 
@@ -1766,23 +1749,10 @@ void QuakeScene::update_entities(const merian::CommandBufferHandle& cmd) {
 }
 
 void QuakeScene::update_particles() {
-    auto& mesh = static_cast<QuakeHostDynamicMesh&>(*get_mesh_infos()[particle_mesh_id].mesh);
-    const size_t previous_index_count = mesh.indices.size();
-    extract_particle_geo(mesh.vertices, mesh.prev_vertices, mesh.indices, particle_size);
-
-    // Scene can't upload empty meshes — detach the instance so it's skipped.
-    const bool has_particles = !mesh.vertices.empty();
-    if (has_particles && !particle_instance_attached) {
-        add_mesh_instance(particle_mesh_id, particle_node_id);
-        particle_instance_attached = true;
-    } else if (!has_particles && particle_instance_attached) {
-        remove_mesh_instance(particle_mesh_id, particle_node_id);
-        particle_instance_attached = false;
-    }
-    if (has_particles) {
-        mesh.vertices_dirty = true;
-        mesh.indices_dirty |= mesh.indices.size() != previous_index_count;
-    }
+    auto& mesh = static_cast<merian::Scene::SimpleMesh&>(*get_mesh_infos()[particle_mesh_id].mesh);
+    mesh.indices_dirty |=
+        extract_particle_geo(mesh.vertices, mesh.indices, particle_slots, particle_size);
+    mesh.vertices_dirty = true;
 }
 
 uint16_t QuakeScene::quantized_fixture_emission(const float radiance) const {

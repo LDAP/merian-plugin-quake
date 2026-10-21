@@ -117,12 +117,12 @@ struct QuakeMaterial : MaterialModel {
         }
     }
 
-    float get_coverage(const ShadingData sd, const TextureManager tm) {
+    float get_coverage(const ShadingData sd, const Textures textures) {
         if (get_flags() == MAT_TYPE_PARTICLE) {
             if (!quake_enable_transparency) {
                 return 1.f;
             }
-            const float alpha = tm.get_sampler2D(header.alpha_texture_id).SampleLevel(sd.uv, 0).a;
+            const float alpha = textures.sample(LOD0Sampler(), header.alpha_texture_id, sd.uv).a;
             // cos^2 sums to 1 over the three discs, which hides their seams
             const float cos_theta = dot(sd.wi, sd.face_normal);
             return float(opacity) / 255.f * saturate(2.f * alpha - 1.f) * cos_theta * cos_theta;
@@ -143,9 +143,9 @@ struct QuakeMaterial : MaterialModel {
         return is_fixture() ? quake_fixture * color : ldr_to_hdr(color);
     }
 
-    float3 get_light_entity_emission(const ShadingData sd, const TextureManager tm) {
-        const float4 radiance = tm.get_sampler2D(fullbright_tex).SampleLevel(sd.uv, 0);
-        const float4 spot = tm.get_sampler2D(normal_tex).SampleLevel(sd.uv, 0);
+    float3 get_light_entity_emission(const ShadingData sd, const Textures textures) {
+        const float4 radiance = textures.sample(LOD0Sampler(), fullbright_tex, sd.uv);
+        const float4 spot = textures.sample(LOD0Sampler(), normal_tex, sd.uv);
         if (spot.a > 0 && dot(sd.wi, spot.rgb * 2 - 1) < cos(radians(spot.a * 90))) {
             return float3(0);
         }
@@ -154,7 +154,7 @@ struct QuakeMaterial : MaterialModel {
     }
 
     override float3 get_emission(const ShadingData sd,
-                                 const TextureManager tm,
+                                 const Textures textures,
                                  const LODSampler2D lod) {
         float2 uv = sd.uv;
         if ((flags & MAT_TYPE_WARP) != 0u) {
@@ -166,28 +166,28 @@ struct QuakeMaterial : MaterialModel {
 
         float3 emission = float3(0);
         if (get_flags() == MAT_TYPE_LIGHT_ENTITY) {
-            emission = get_light_entity_emission(sd, tm);
+            emission = get_light_entity_emission(sd, textures);
         } else if (get_flags() == MAT_TYPE_WATERFALL) {
             emission = float3(1, 0, 1);
             if (let albedo_tex_id = header.get_alpha_texture_id()) {
                 emission = quake_waterfall_emission *
-                           pow(lod.sample(tm.get_sampler2D(albedo_tex_id), uv).rgb, 1. / 1.2);
+                           pow(textures.sample(lod, albedo_tex_id, uv).rgb, 1. / 1.2);
             }
         } else if (fullbright_tex != TextureID(-1)) {
-            emission = fullbright_emission(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
+            emission = fullbright_emission(textures.sample(lod, fullbright_tex, uv).rgb);
         }
-        return min(get_emission_scale(get_coverage(sd, tm)) * emission, QUAKE_MAX_RADIANCE);
+        return min(get_emission_scale(get_coverage(sd, textures)) * emission, QUAKE_MAX_RADIANCE);
     }
 
     QuakeMaterialSample get_sample(const ShadingData sd,
-                                   const TextureManager tm,
+                                   const Textures textures,
                                    const LODSampler2D lod,
                                    out float3 out_emission,
                                    out OrthonormalFrame out_shading_frame) {
         // Normal
         QuakeMaterialSample s;
         if (normal_tex != TextureID(-1) && get_flags() != MAT_TYPE_LIGHT_ENTITY) {
-            const float3 n = (tm.get_sampler2D(normal_tex).SampleLevel(sd.uv, 0).rgb - 0.5) * 2;
+            const float3 n = (textures.sample(LOD0Sampler(), normal_tex, sd.uv).rgb - 0.5) * 2;
             const OrthonormalFrame mapped = sd.frame.apply_normal_map(n);
             if (merian_hint_clamp_normals) {
                 const float3 clamped_n =
@@ -213,32 +213,31 @@ struct QuakeMaterial : MaterialModel {
 
         float3 albedo = float3(1, 0, 1);
         if (let albedo_tex_id = header.get_alpha_texture_id()) {
-            albedo = lod.sample(tm.get_sampler2D(albedo_tex_id), uv).rgb;
+            albedo = textures.sample(lod, albedo_tex_id, uv).rgb;
             // desaturate for a better look
             albedo = pow(max(float3(0.0003), albedo), 1. / 1.2);
         }
 
         if (get_flags() == MAT_TYPE_LIGHT_ENTITY) {
             albedo = float3(0);
-            out_emission = get_light_entity_emission(sd, tm);
+            out_emission = get_light_entity_emission(sd, textures);
         } else if (get_flags() == MAT_TYPE_WATERFALL) {
             out_emission = quake_waterfall_emission * albedo;
             // } else if (get_flags() == MAT_TYPE_TELE || get_flags() == MAT_TYPE_SPRITE) {
             //     TODO: Fix on host side!
             //     out_emission = ldr_to_hdr(albedo);
         } else if (fullbright_tex != TextureID(-1)) {
-            out_emission =
-                fullbright_emission(lod.sample(tm.get_sampler2D(fullbright_tex), uv).rgb);
+            out_emission = fullbright_emission(textures.sample(lod, fullbright_tex, uv).rgb);
         } else {
             out_emission = float3(0);
         }
 
-        const float coverage = get_coverage(sd, tm);
+        const float coverage = get_coverage(sd, textures);
         out_emission = min(out_emission * get_emission_scale(coverage), QUAKE_MAX_RADIANCE);
 
         float f0 = QUAKE_BASE_F0;
         if (gloss_tex != TextureID(-1)) {
-            const float gloss = tm.get_sampler2D(gloss_tex).SampleLevel(uv, 0).r;
+            const float gloss = textures.sample(LOD0Sampler(), gloss_tex, uv).r;
             f0 = lerp(QUAKE_BASE_F0, 1.0f, gloss);
             roughness = lerp(QUAKE_BASE_ROUGHNESS, 0.3f, gloss);
         }

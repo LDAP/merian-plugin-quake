@@ -6,7 +6,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cmath>
+#include <limits>
 
 extern "C" {
 #include "quakedef.h"
@@ -129,6 +131,10 @@ merian::float2 particle_uv(const uint32_t index, const merian::float2 disc) {
            static_cast<float>(PARTICLE_ATLAS_SIZE);
 }
 
+// x = NaN makes the triangles inactive (Vulkan spec, "Inactive Primitives and Instances")
+constexpr merian::PackedVertexData INACTIVE_VERTEX = {
+    {std::numeric_limits<float>::quiet_NaN(), 0.f, 0.f}, 0, {}, 0};
+
 } // namespace
 
 std::vector<uint32_t> particle_atlas(const uint32_t* palette) {
@@ -152,9 +158,33 @@ std::vector<uint32_t> particle_atlas(const uint32_t* palette) {
     return atlas;
 }
 
-void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
-                          std::vector<merian::PackedPrevVertexData>& prev_vertices,
+namespace {
+
+void grow_particle_slots(std::vector<merian::PackedVertexData>& vertices,
+                         std::vector<merian::uint3>& indices,
+                         const size_t slot_count) {
+    const size_t first_plane = indices.size() / 2;
+    vertices.resize(slot_count * PARTICLE_SLOT_VERTICES, INACTIVE_VERTEX);
+    indices.resize(slot_count * PARTICLE_PLANES * 2);
+    for (size_t plane = first_plane; plane < slot_count * PARTICLE_PLANES; plane++) {
+        const uint32_t base = static_cast<uint32_t>(plane * 4);
+        indices[2 * plane] = merian::uint3(base, base + 1, base + 2);
+        indices[2 * plane + 1] = merian::uint3(base, base + 2, base + 3);
+    }
+}
+
+} // namespace
+
+void init_particle_geo(std::vector<merian::PackedVertexData>& vertices,
+                       std::vector<merian::uint3>& indices) {
+    vertices.clear();
+    indices.clear();
+    grow_particle_slots(vertices, indices, PARTICLE_SLOT_CHUNK);
+}
+
+bool extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
                           std::vector<merian::uint3>& indices,
+                          std::vector<uint32_t>& active_slots,
                           const float size) {
     static constexpr merian::float2 corners[4] = {
         {-1.f, -1.f}, {1.f, -1.f}, {1.f, 1.f}, {-1.f, 1.f}};
@@ -165,39 +195,32 @@ void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
                 uvs[color][corner] = merian::half2(particle_uv(color, corners[corner]));
         return uvs;
     }();
-    constexpr uint32_t PLANES_PER_PARTICLE = 3;
-
-    uint32_t particle_count = 0;
-    for (const particle_t* p = active_particles; p != nullptr; p = p->next)
-        particle_count++;
-    const size_t plane_count = static_cast<size_t>(particle_count) * PLANES_PER_PARTICLE;
-    vertices.resize(plane_count * 4);
-    prev_vertices.resize(plane_count * 4);
-
-    const size_t first_new_plane = std::min(indices.size() / 2, plane_count);
-    indices.resize(plane_count * 2);
-    for (size_t plane = first_new_plane; plane < plane_count; plane++) {
-        const uint32_t base = static_cast<uint32_t>(plane * 4);
-        indices[2 * plane] = merian::uint3(base, base + 1, base + 2);
-        indices[2 * plane + 1] = merian::uint3(base, base + 2, base + 3);
+    for (const uint32_t slot : active_slots)
+        std::fill_n(vertices.data() + static_cast<size_t>(slot) * PARTICLE_SLOT_VERTICES,
+                    PARTICLE_SLOT_VERTICES, INACTIVE_VERTEX);
+    active_slots.clear();
+    size_t slot_end = 0;
+    for (const particle_t* p = active_particles; p != nullptr; p = p->next) {
+        const auto slot = static_cast<uint32_t>(p - particles);
+        active_slots.push_back(slot);
+        slot_end = std::max(slot_end, static_cast<size_t>(slot) + 1);
     }
+    const bool grown = slot_end * PARTICLE_SLOT_VERTICES > vertices.size();
+    if (grown)
+        grow_particle_slots(vertices, indices,
+                            (slot_end + PARTICLE_SLOT_CHUNK - 1) / PARTICLE_SLOT_CHUNK *
+                                PARTICLE_SLOT_CHUNK);
 
     vec3_t vpn, vright, vup;
     AngleVectors(r_refdef.viewangles, vpn, vright, vup);
     const merian::float3 eye = merian::as_float3(r_refdef.vieworg);
     const merian::float3 view_dir = merian::as_float3(vpn);
 
-    merian::PackedVertexData* vertex = vertices.data();
-    merian::PackedPrevVertexData* prev_vertex = prev_vertices.data();
-    for (particle_t* p = active_particles; p != nullptr; p = p->next) {
-        merian::XORShift32 xrand{static_cast<uint32_t>(p - particles + 1) * 2654435761u};
+    for (const uint32_t slot : active_slots) {
+        const particle_t* p = particles + slot;
+        merian::XORShift32 xrand{(slot + 1) * 2654435761u};
         const float jitter = 2.f * (xrand.next_float() - 0.5f) + 2.f * (xrand.next_float() - 0.5f);
         const merian::float3 center = merian::as_float3(p->org) + jitter;
-        const merian::float3 prev_center =
-            (p->mv_prev_valid ? merian::as_float3(p->mv_prev_origin) : merian::as_float3(p->org)) +
-            jitter;
-        VectorCopy(p->org, p->mv_prev_origin);
-        p->mv_prev_valid = true;
 
         const float depth = merian::dot(center - eye, view_dir);
         const float radius =
@@ -211,10 +234,11 @@ void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
                                                       : merian::float3(1.f, 0.f, 0.f),
                           facing));
         const merian::float3 up = merian::cross(facing, right);
-        const merian::float3 planes[PLANES_PER_PARTICLE][3] = {
+        const merian::float3 planes[PARTICLE_PLANES][3] = {
             {right, up, facing}, {facing, up, -right}, {facing, right, up}};
 
         const auto& uvs = corner_uvs[static_cast<uint32_t>(static_cast<int>(p->color) & 0xff)];
+        merian::PackedVertexData* vertex = vertices.data() + slot * PARTICLE_SLOT_VERTICES;
         for (const auto& [u, v, normal] : planes) {
             const uint32_t encoded_normal = merian::encode_normal(normal);
             const merian::float3 radius_u = radius * u;
@@ -226,12 +250,11 @@ void extract_particle_geo(std::vector<merian::PackedVertexData>& vertices,
                 vertex->encoded_normal = encoded_normal;
                 vertex->uv = uvs[corner];
                 vertex->encoded_tangent = 0;
-                prev_vertex->position = prev_center + offset;
                 vertex++;
-                prev_vertex++;
             }
         }
     }
+    return grown;
 }
 
 void write_alias_uvs(const aliashdr_t* hdr, merian::PackedVertexData* vertices_dst) {
@@ -250,11 +273,7 @@ void lerp_alias_vertices(aliashdr_t* hdr,
                          const int pose1,
                          const int pose2,
                          const float blend,
-                         const int prev_pose1,
-                         const int prev_pose2,
-                         const float prev_blend,
-                         merian::PackedVertexData* vertices_dst,
-                         merian::PackedPrevVertexData* prev_dst) {
+                         merian::PackedVertexData* vertices_dst) {
     const auto* desc = (aliasmesh_t*)((uint8_t*)hdr + hdr->meshdesc);
     const auto* trivertexes = (trivertx_t*)((uint8_t*)hdr + hdr->vertexes);
 
@@ -272,12 +291,6 @@ void lerp_alias_vertices(aliashdr_t* hdr,
         vertices_dst[v].position = merian::lerp(p1, p2, blend);
         vertices_dst[v].encoded_normal =
             merian::encode_normal(merian::lerp(normals_pose1[vi], normals_pose2[vi], blend));
-
-        const auto& ptv1 = trivertexes[hdr->numverts * prev_pose1 + vi];
-        const auto& ptv2 = trivertexes[hdr->numverts * prev_pose2 + vi];
-        const merian::float3 pp1{float(ptv1.v[0]), float(ptv1.v[1]), float(ptv1.v[2])};
-        const merian::float3 pp2{float(ptv2.v[0]), float(ptv2.v[1]), float(ptv2.v[2])};
-        prev_dst[v].position = merian::lerp(pp1, pp2, prev_blend);
     }
 }
 

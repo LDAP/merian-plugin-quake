@@ -135,14 +135,6 @@ QuakeUiNode::process(const merian::NodeIO& io,
     const std::shared_ptr<UIDrawCommands>& draw_commands = io[con_ui_draw_commands];
     const std::shared_ptr<merian::Scene>& scene = io[con_scene];
 
-    // Scene::update bails before material_system::update while !is_ready
-    // (splash/loading), but the UI textures still need uploading.
-    if (scene && !scene->is_ready()) {
-        const auto& tm = scene->get_texture_manager();
-        if (tm)
-            tm->update(cmd);
-    }
-
     const merian::ImageViewHandle out_view = merian::ImageView::create(out_image);
     const vk::RenderingAttachmentInfo color_attachment{
         *out_view,

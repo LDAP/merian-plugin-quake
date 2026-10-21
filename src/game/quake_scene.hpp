@@ -359,33 +359,24 @@ class QuakeScene : public merian::Scene {
         int cached_pose1 = -1;
         int cached_pose2 = -1;
         float cached_blend = -1.f;
-        int cached_prev_pose1 = -1;
-        int cached_prev_pose2 = -1;
-        float cached_prev_blend = -1.f;
     };
     std::unordered_map<entity_t*, EntityMeshSlot> entity_slots;
-    // Holds last frame's slots until each surviving entity migrates back; what
-    // remains belongs to entities that vanished (server-removed, culled, or
-    // temp-entity slots recycled without nulling ent->model — e.g. expired
-    // lightning beams) and is destroyed by release_unused_entities.
+    // last frame's slots until surviving entities migrate back; the rest belongs to vanished ones
     std::unordered_map<entity_t*, EntityMeshSlot> previous_entity_slots;
 
-    // Returns nullptr if the previous-frame slot is unusable (caller builds fresh).
+    // nullptr if the previous-frame slot is unusable
     EntityMeshSlot* migrate_entity_slot(entity_t* ent, uint8_t instance_mask);
     void release_unused_entities();
     void destroy_slot(EntityMeshSlot& slot);
 
-    // Single particle mesh with palette-encoded color. The instance is only
-    // attached while extraction yields non-empty geometry — Scene can't
-    // upload empty meshes.
     merian::Scene::MeshID particle_mesh_id = 0;
+    // the slots written by the last update
+    std::vector<uint32_t> particle_slots;
     merian::Scene::NodeID particle_node_id = merian::Scene::NODE_ID_INVALID;
     merian::MaterialID particle_material_id = 0;
-    bool particle_instance_attached = false;
     float particle_size = 3.F;
     float particle_opacity = 1.F;
 
-    // Input.
     merian::InputControllerHandle controller = std::make_shared<merian::DummyInputController>();
     merian::WindowHandle window;
     std::shared_ptr<merian::InputListener> input_listener;

@@ -1,5 +1,0 @@
-{
-    "include": [
-        "mixins/debug_sampling.json"
-    ]
-}

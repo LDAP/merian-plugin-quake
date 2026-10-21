@@ -5,6 +5,7 @@
 #include "merian/utils/vector_matrix.hpp"
 
 #include <array>
+#include <memory>
 #include <string>
 
 namespace merian_quake {
@@ -27,6 +28,10 @@ class QuakeClassicSkyEnvMap : public merian::EnvMap {
         cursor["alpha"] = alpha;
         cursor["sun_dir"] = sun_dir;
         cursor["sun_color"] = sun_color;
+    }
+
+    merian::EnvMapHandle clone() const override {
+        return std::make_shared<QuakeClassicSkyEnvMap>(*this);
     }
 
     void set_sun(const merian::float3& dir, const merian::float3& color) {
@@ -62,6 +67,10 @@ class QuakeCubemapSkyEnvMap : public merian::EnvMap {
         cursor["dn"] = faces[5];
         cursor["sun_dir"] = sun_dir;
         cursor["sun_color"] = sun_color;
+    }
+
+    merian::EnvMapHandle clone() const override {
+        return std::make_shared<QuakeCubemapSkyEnvMap>(*this);
     }
 
     void set_sun(const merian::float3& dir, const merian::float3& color) {

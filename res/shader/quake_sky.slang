@@ -44,12 +44,12 @@ struct QuakeClassicSkyEnvMap : IEnvMap {
     float3 sun_dir;
     float3 sun_color;
 
-    float3 eval(const ShadingData sd, const TextureManager tm, const LODSampler2D lod) {
+    float3 eval(const ShadingData sd, const Textures textures, const LODSampler2D lod) {
         const float3 dir = -sd.wi;
         const float2 st = 0.5 + float2(dir.x, dir.y) / abs(dir.z);
         const float2 t = sd.time * float2(0.12, 0.12);
-        const float4 bck = lod.sample(tm.get_sampler2D(solid), st + 0.5 * t);
-        const float4 fnt = lod.sample(tm.get_sampler2D(alpha), st + t);
+        const float4 bck = textures.sample(lod, solid, st + 0.5 * t);
+        const float4 fnt = textures.sample(lod, alpha, st + t);
         const float3 tex = lerp(bck.rgb, fnt.rgb, fnt.a);
         float3 emission = sky_emission(tex, quake_classic_sky_exp_scale, quake_classic_sky_exp_rate,
                                        quake_classic_sky_pow_scale, quake_classic_sky_pow_gamma);
@@ -71,7 +71,7 @@ struct QuakeCubemapSkyEnvMap : IEnvMap {
     float3 sun_dir;
     float3 sun_color;
 
-    float3 eval(const ShadingData sd, const TextureManager tm, const LODSampler2D lod) {
+    float3 eval(const ShadingData sd, const Textures textures, const LODSampler2D lod) {
         const float3 dir = -sd.wi;
         TextureID id = rt;
         float2 uv;
@@ -109,9 +109,9 @@ struct QuakeCubemapSkyEnvMap : IEnvMap {
         }
         }
 
-        float3 emission = sky_emission(lod.sample(tm.get_sampler2D(id), uv).rgb,
-                                       quake_cube_sky_exp_scale, quake_cube_sky_exp_rate,
-                                       quake_cube_sky_pow_scale, quake_cube_sky_pow_gamma);
+        float3 emission = sky_emission(textures.sample(lod, id, uv).rgb, quake_cube_sky_exp_scale,
+                                       quake_cube_sky_exp_rate, quake_cube_sky_pow_scale,
+                                       quake_cube_sky_pow_gamma);
         if (sd.bounce > 0) {
             emission += quake_sun(dir, sun_dir, sun_color);
         }
