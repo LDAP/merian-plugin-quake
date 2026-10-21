@@ -54,6 +54,14 @@ QuakeNode::describe_outputs([[maybe_unused]] const merian::NodeIOLayout& io_layo
                   static_cast<uint32_t>(info.get_iteration()), io.get_seed(),
                   info.get_shader_object_allocator());
 
+    const uint32_t changes = scene->get_last_updates();
+    if ((changes & merian::Scene::SceneUpdateGeometry) != 0)
+        io.send_event("geometry_changed");
+    if ((changes & merian::Scene::SceneUpdateTransform) != 0)
+        io.send_event("transform_changed");
+    if ((changes & merian::Scene::SceneUpdateCamera) != 0)
+        io.send_event("camera_changed");
+
     io[con_ui_draw_commands] = scene->get_ui_draw_commands();
     return {};
 }

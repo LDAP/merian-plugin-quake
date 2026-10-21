@@ -1,7 +1,7 @@
 {
     "cli": {
         "--": {
-            "pointer": "/nodes/quake/properties/startup commands"
+            "pointer": "/nodes/scene/properties/startup commands"
         }
     },
     "nodes": {
@@ -67,8 +67,8 @@
             "enabled": true,
             "outputs": [
                 "canvas->display.canvas",
-                "controller->quake.controller",
-                "window->quake.window"
+                "controller->scene.controller",
+                "window->scene.window"
             ],
             "properties": {
                 "acquire timeout": 100000000,
@@ -84,7 +84,7 @@
             },
             "type": "Window"
         },
-        "quake": {
+        "scene": {
             "enabled": true,
             "outputs": [
                 "scene->gbuffer.scene",

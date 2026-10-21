@@ -21,19 +21,19 @@
                 "texture lod bias": -1.0
             }
         },
-        "quake": {
-            "$+$outputs": [
-                "scene->dlss.scene"
-            ],
-            "properties": {
-                "enable transparency": true
-            }
-        },
         "render": {
             "properties": {
                 "output": {
                     "demodulate albedo": false
                 }
+            }
+        },
+        "scene": {
+            "$+$outputs": [
+                "scene->dlss.scene"
+            ],
+            "properties": {
+                "enable transparency": true
             }
         },
         "tonemap": {

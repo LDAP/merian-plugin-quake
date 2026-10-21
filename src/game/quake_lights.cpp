@@ -637,7 +637,7 @@ MapLights::MapLights(const char* entities, qmodel_t* world_model) : world(world_
     std::unordered_map<const texture_t*, TextureRole> texture_roles;
     std::vector<std::pair<const msurface_t*, size_t>> lamps;
     std::unordered_map<const texture_t*, size_t> liquid_roots;
-    std::unordered_map<const texture_t*, std::vector<const msurface_t*>> unowned_liquid_faces;
+    std::vector<const msurface_t*> unowned_liquid_faces;
     std::vector<bool> liquid_owner(lights.size(), false);
     std::vector<float> projected_area(lights.size(), 0.f);
     std::unordered_map<uint64_t, LuminanceTable> tables;
@@ -679,7 +679,7 @@ MapLights::MapLights(const char* entities, qmodel_t* world_model) : world(world_
         const LightEntity* light = surface_owner(surf);
         if (light == nullptr) {
             if (is_liquid(tex))
-                unowned_liquid_faces[tex].push_back(&surf);
+                unowned_liquid_faces.push_back(&surf);
             continue;
         }
         const size_t index = static_cast<size_t>(light - lights.data());
@@ -697,13 +697,12 @@ MapLights::MapLights(const char* entities, qmodel_t* world_model) : world(world_
         }
     }
 
-    for (const auto& [tex, faces] : unowned_liquid_faces)
-        if (const auto root = liquid_roots.find(tex); root != liquid_roots.end())
-            for (const msurface_t* surf : faces) {
-                lamps.emplace_back(surf, root->second);
-                projected_area[root->second] +=
-                    lamp_area(*surf, pack_tint(lights[root->second].color));
-            }
+    for (const msurface_t* surf : unowned_liquid_faces)
+        if (const auto root = liquid_roots.find(surf->texinfo->texture);
+            root != liquid_roots.end()) {
+            lamps.emplace_back(surf, root->second);
+            projected_area[root->second] += lamp_area(*surf, pack_tint(lights[root->second].color));
+        }
 
     std::vector<size_t> receivers;
     std::vector<size_t> lamp_owners;

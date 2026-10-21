@@ -1121,9 +1121,7 @@ void QuakeScene::load_world(const merian::CommandBufferHandle& cmd) {
     world_meshes_built = true;
 }
 
-std::unordered_map<QuakeScene::BrushMaterialKey,
-                   QuakeScene::BrushSurfaceBucket,
-                   QuakeScene::BrushMaterialKeyHash>
+std::vector<std::pair<QuakeScene::BrushMaterialKey, QuakeScene::BrushSurfaceBucket>>
 QuakeScene::collect_brush_surfaces(qmodel_t* mod) {
     const bool world_space = mod == cl.worldmodel || mod->name[0] == '*';
     const auto drawn = [&](const msurface_t* surf) {
@@ -1155,7 +1153,8 @@ QuakeScene::collect_brush_surfaces(qmodel_t* mod) {
         }
     }
 
-    std::unordered_map<BrushMaterialKey, BrushSurfaceBucket, BrushMaterialKeyHash> buckets;
+    std::vector<std::pair<BrushMaterialKey, BrushSurfaceBucket>> buckets;
+    std::unordered_map<BrushMaterialKey, size_t, BrushMaterialKeyHash> bucket_index;
     for (int i = 0; i < mod->nummodelsurfaces; i++) {
         msurface_t* surf = &mod->surfaces[mod->firstmodelsurface + i];
         if (!drawn(surf) || sides[i] == Sides::MERGED)
@@ -1170,8 +1169,16 @@ QuakeScene::collect_brush_surfaces(qmodel_t* mod) {
             light_styles_enabled && (fixture_emission != 0 || tex->fullbright != nullptr)
                 ? surface_light.style
                 : 0;
-        auto& bucket = buckets[{tex, surf->flags & SURF_INTERESTING_BITS, sides[i] == Sides::TWO,
-                                light_style, fixture_tint, fixture_emission}];
+        const BrushMaterialKey key{tex,
+                                   surf->flags & SURF_INTERESTING_BITS,
+                                   sides[i] == Sides::TWO,
+                                   light_style,
+                                   fixture_tint,
+                                   fixture_emission};
+        const auto [it, inserted] = bucket_index.try_emplace(key, buckets.size());
+        if (inserted)
+            buckets.emplace_back(key, BrushSurfaceBucket{});
+        auto& bucket = buckets[it->second].second;
 
         merian::float3 plane_n = merian::as_float3(surf->plane->normal);
         if ((surf->flags & SURF_PLANEBACK) != 0)
@@ -1463,8 +1470,14 @@ QuakeScene::EntityMeshSlot* QuakeScene::migrate_entity_slot(entity_t* ent,
 }
 
 void QuakeScene::release_unused_entities() {
+    // in node id order, so the freed ids are reused alike in every run
+    std::vector<EntityMeshSlot*> released;
+    released.reserve(previous_entity_slots.size());
     for (auto& [_, slot] : previous_entity_slots)
-        destroy_slot(slot);
+        released.push_back(&slot);
+    std::ranges::sort(released, {}, &EntityMeshSlot::node_id);
+    for (EntityMeshSlot* slot : released)
+        destroy_slot(*slot);
     previous_entity_slots.clear();
 }
 
@@ -1566,10 +1579,9 @@ void QuakeScene::update_alias_entity(entity_t* ent,
 
     const bool fov_scaled =
         ent == &cl.viewent && scr_fov.value > 90.f && cl_gun_fovscale.value != 0.f;
-    update_node(slot->node_id,
-                alias_transform(lerpdata.origin, lerpdata.angles, ent->scale, fov_scaled,
-                                merian::as_float3(hdr->scale),
-                                merian::as_float3(hdr->scale_origin)));
+    update_node(slot->node_id, alias_transform(lerpdata.origin, lerpdata.angles, ent->scale,
+                                               fov_scaled, merian::as_float3(hdr->scale),
+                                               merian::as_float3(hdr->scale_origin)));
 }
 
 void QuakeScene::update_brush_entity(entity_t* ent,

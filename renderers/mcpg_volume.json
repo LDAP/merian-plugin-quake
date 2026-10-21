@@ -1,6 +1,6 @@
 {
     "nodes": {
-        "quake": {
+        "scene": {
             "$+$outputs": [
                 "scene->distance_guiding.scene"
             ]

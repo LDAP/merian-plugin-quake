@@ -222,7 +222,8 @@ class QuakeScene : public merian::Scene {
         std::vector<merian::PackedVertexData> vertices;
         std::vector<merian::uint3> indices;
     };
-    std::unordered_map<BrushMaterialKey, BrushSurfaceBucket, BrushMaterialKeyHash>
+    // in the order the materials first appear
+    std::vector<std::pair<BrushMaterialKey, BrushSurfaceBucket>>
     collect_brush_surfaces(qmodel_t* mod);
     QuakeMaterial brush_material(const BrushMaterialKey& key, texture_t* tex, const entity_t* ent);
 
