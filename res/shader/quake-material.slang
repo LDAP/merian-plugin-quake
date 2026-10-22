@@ -66,7 +66,7 @@ float2 quake_waves(const float2 st, const float time) {
                 pow(max(sin(-(st).x * 5 + -(st).y * 3 + (time) * 3), 0), 5));
 }
 
-// albedo tints both lobes (matches the old bsdf_ggx_diffuse_mix; keeps demodulation exact)
+// albedo tints both lobes, so demodulation stays exact
 typealias QuakeSurfaceBSDF = TintBSDF<FresnelMixBSDF<GGXBRDF, DiffuseTransmissionBSDF>>;
 
 typealias QuakeBSDF = MixBSDF<ThinDielectricBSDF, QuakeSurfaceBSDF>;
@@ -98,12 +98,16 @@ struct QuakeMaterial : MaterialModel {
         return flags & ~uint16_t(MAT_TYPE_FIXTURE);
     }
 
+    bool is_particle() {
+        return get_flags() == MAT_TYPE_PARTICLE;
+    }
+
     bool is_fixture() {
         return (flags & MAT_TYPE_FIXTURE) != 0u;
     }
 
     bool is_translucent() {
-        return quake_enable_transparency && opacity < 255;
+        return quake_enable_transparency && (opacity < 255 || is_particle());
     }
 
     float get_pane_ior() {
@@ -118,7 +122,7 @@ struct QuakeMaterial : MaterialModel {
     }
 
     float get_coverage(const ShadingData sd, const Textures textures) {
-        if (get_flags() == MAT_TYPE_PARTICLE) {
+        if (is_particle()) {
             if (!quake_enable_transparency) {
                 return 1.f;
             }
@@ -244,16 +248,18 @@ struct QuakeMaterial : MaterialModel {
         const float alpha = ggx_roughness_to_alpha(roughness);
         const float pane_ior = coverage > 0.f ? get_pane_ior() : 1.f;
         const ThinDielectricBSDF clear_pane = ThinDielectricBSDF(1.f / pane_ior, float3(1.0f));
-        const float3 transmittance = pane == PANE_LIQUID && is_translucent()
-                                         ? saturate((1.f - albedo) / max(albedo, 1e-4f))
-                                         : float3(0.f);
+        const float3 transmittance =
+            (pane == PANE_LIQUID || is_particle()) && is_translucent()
+                ? saturate((1.f - albedo) / max(albedo, 1e-4f))
+                : float3(0.f);
         s.brdf =
             QuakeBSDF(clear_pane,
                       QuakeSurfaceBSDF(FresnelMixBSDF<GGXBRDF, DiffuseTransmissionBSDF>(
                                            GGXBRDF(alpha),
-                                           DiffuseTransmissionBSDF(float3(1.f), transmittance), f0),
+                                           DiffuseTransmissionBSDF(float3(1.f), transmittance),
+                                           is_particle() ? 0.f : f0, is_particle() ? 0.f : 1.f),
                                        albedo),
-                      coverage);
+                      is_particle() ? 1.f : coverage);
         return s;
     }
 }
