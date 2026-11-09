@@ -57,9 +57,7 @@
                 "5": true,
                 "6": false,
                 "7": false,
-                "emission format": "R16G16B16A16Sfloat",
-                "height": 1080,
-                "width": 1920
+                "emission format": "R16G16B16A16Sfloat"
             },
             "type": "GBuffer (Raytraced)"
         },

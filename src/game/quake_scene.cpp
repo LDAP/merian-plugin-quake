@@ -408,9 +408,9 @@ QuakeScene::QuakeScene(const merian::ShaderCompileContextHandle& compile_context
     update_material_constants();
     material_system->set_alpha_test_threshold(0.7F);
 
-    auto cam =
-        std::make_shared<merian::Camera>(merian::float3(1, 0, 0), merian::float3(0, 0, 0), get_up(),
-                                         merian::radians(60.F), 16.F / 9.F, 0.01F, 1e5f);
+    auto cam = std::make_shared<merian::Camera>(merian::float3(1, 0, 0), merian::float3(0, 0, 0),
+                                                get_up(), merian::radians(60.F),
+                                                merian::Camera::DEFAULT_RESOLUTION, 0.01F, 1e5f);
     quake_camera = add_camera(std::move(cam));
 
     // Quake
@@ -803,8 +803,6 @@ void QuakeScene::update_camera() {
                  merian::float3(up[0], up[1], up[2]), merian::radians(r_refdef.fov_y));
     if (resolution.width > 0 && resolution.height > 0) {
         cam->set_resolution(resolution);
-    } else {
-        cam->set_aspect_ratio(16.F / 9.F);
     }
 }
 
